@@ -241,7 +241,8 @@ lts_module_t *lts_modules[] = {
     // &lts_app_asyn_backend_module,
     // &lts_app_echo_module,
     // &lts_app_http_core_module,
-    &lts_app_sjsonb_module,
+    // &lts_app_sjsonb_module,
+    &lts_app_p2p_fsm_module,
     NULL,
 };
 lts_module_t *lts_module_event_cur;

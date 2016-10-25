@@ -22,7 +22,8 @@ if (CMAKE_BUILD_TYPE STREQUAL Debug)
 endif()
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
-link_directories(/usr/local/lib64)
+include_directories(/usr/local/hiredis/include)
+link_directories(/usr/local/hiredis/lib)
 add_subdirectory(src)
 
 configure_file(
