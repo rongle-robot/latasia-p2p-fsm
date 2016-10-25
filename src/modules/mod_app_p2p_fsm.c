@@ -5,18 +5,70 @@
 #include <strings.h>
 
 #include "latasia.h"
-#include "rbtree.h"
 #include "logger.h"
 #include "conf.h"
 #include "protocol_sjsonb.h"
+#include "rbt_timer.h"
 
 #include <hiredis.h>
 
+#define CONF_FILE           "conf/mod_app.conf"
 #define __THIS_FILE__       "src/modules/mod_app_p2p_fsm.c"
+
+
+// 强制超时让连接关闭
+#define imply_closing(s) do {\
+    lts_timer_heap_del(&lts_timer_heap, s);\
+    (s)->timeout = 0;\
+    lts_timer_heap_add(&lts_timer_heap, s);\
+} while (0)
+
+
+// 加载模块配置
+static int load_p2p_fsm_config(lts_conf_p2p_fsm_t *conf, lts_pool_t *pool)
+{
+    extern lts_conf_item_t *lts_conf_p2p_fsm_items[];
+
+    off_t sz;
+    uint8_t *addr;
+    int rslt;
+    lts_file_t lts_conf_file = {
+        -1, {
+            (uint8_t *)CONF_FILE, sizeof(CONF_FILE) - 1,
+        },
+    };
+
+    if (-1 == load_conf_file(&lts_conf_file, &addr, &sz)) {
+        return -1;
+    }
+    rslt = parse_conf(addr, sz, lts_conf_p2p_fsm_items, pool, conf);
+    close_conf_file(&lts_conf_file, addr, sz);
+
+    return rslt;
+}
 
 
 static int init_p2p_fsm_module(lts_module_t *module)
 {
+	lts_pool_t *pool;
+
+    // 创建模块内存池
+    pool = lts_create_pool(MODULE_POOL_SIZE);
+    if (NULL == pool) {
+        // log
+        return -1;
+    }
+    module->pool = pool;
+
+	// 加载模块配置
+    if (-1 == load_p2p_fsm_config(&lts_asyn_conf, pool)) {
+        (void)lts_write_logger(
+            &lts_stderr_logger, LTS_LOG_WARN,
+            "%s:load app module config failed, using default\n",
+            STR_LOCATION
+        );
+    }
+
     return 0;
 }
 
@@ -29,8 +81,20 @@ static void exit_p2p_fsm_module(lts_module_t *module)
 
 static void p2p_fsm_on_connected(lts_socket_t *s)
 {
-    redisContext *s_rds;
-    fprintf(stderr, "new connection...\n");
+    redisContext *rds;
+
+    rds = redisConnect(lts_p2p_fsm_conf.redis_host,
+                       lts_p2p_fsm_conf.redis_port);
+    if (rds->err) {
+        fprintf(stderr, "redis failed\n");
+
+		imply_closing(s);
+
+        redisFree(rds);
+        return;
+    }
+
+    redisFree(rds);
     return;
 }
 
