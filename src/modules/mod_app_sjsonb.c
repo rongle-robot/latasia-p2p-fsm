@@ -70,6 +70,7 @@ static lts_app_module_itfc_t sjsonb_itfc = {
     &sjsonb_on_connected,
     &sjsonb_service,
     &sjsonb_send_more,
+    NULL,
 };
 
 lts_module_t lts_app_sjsonb_module = {

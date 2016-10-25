@@ -30,8 +30,18 @@ static void exit_p2p_fsm_module(lts_module_t *module)
 static void p2p_fsm_on_connected(lts_socket_t *s)
 {
     redisContext *s_rds;
+    fprintf(stderr, "new connection...\n");
     return;
 }
+
+
+static void p2p_fsm_on_closing(lts_socket_t *s)
+{
+    redisContext *s_rds;
+    fprintf(stderr, "closing...\n");
+    return;
+}
+
 
 static void p2p_fsm_service(lts_socket_t *s)
 {
@@ -71,6 +81,7 @@ static lts_app_module_itfc_t p2p_fsm_itfc = {
     &p2p_fsm_on_connected,
     &p2p_fsm_service,
     &p2p_fsm_send_more,
+    &p2p_fsm_on_closing,
 };
 
 lts_module_t lts_app_p2p_fsm_module = {
