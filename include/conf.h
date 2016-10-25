@@ -30,6 +30,7 @@ extern "C" {
 typedef struct lts_conf_s lts_conf_t;
 typedef struct lts_conf_sync_s lts_conf_sync_t;
 typedef struct lts_conf_asyn_s lts_conf_asyn_t;
+typedef struct lts_conf_p2p_fsm_s lts_conf_p2p_fsm_t;
 
 
 struct lts_conf_s {
@@ -41,8 +42,8 @@ struct lts_conf_s {
     lts_str_t pid_file; // pid文件
     lts_str_t log_file; // 日志
     lts_str_t app_mod_conf; // 应用模块配置文件
-}
-;
+};
+
 struct lts_conf_sync_s {
     lts_str_t host;
     uintptr_t port;
@@ -51,6 +52,12 @@ struct lts_conf_sync_s {
 struct lts_conf_asyn_s {
     lts_str_t host;
     uintptr_t port;
+};
+
+struct lts_conf_p2p_fsm_s {
+    char *redis_host;
+    int redis_port;
+    char *redis_auth;
 };
 
 
@@ -66,6 +73,7 @@ typedef struct {
 extern lts_conf_t lts_main_conf;
 extern lts_conf_sync_t lts_sync_conf;
 extern lts_conf_asyn_t lts_asyn_conf;
+extern lts_conf_p2p_fsm_t lts_p2p_fsm_conf;
 
 extern int load_conf_file(lts_file_t *file, uint8_t **addr, off_t *sz);
 

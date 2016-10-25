@@ -10,6 +10,8 @@
 #include "conf.h"
 #include "protocol_sjsonb.h"
 
+#include <hiredis.h>
+
 #define __THIS_FILE__       "src/modules/mod_app_p2p_fsm.c"
 
 
@@ -27,6 +29,7 @@ static void exit_p2p_fsm_module(lts_module_t *module)
 
 static void p2p_fsm_on_connected(lts_socket_t *s)
 {
+    redisContext *s_rds;
     return;
 }
 
