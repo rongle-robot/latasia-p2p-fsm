@@ -10,8 +10,6 @@
 #include "conf.h"
 #include "protocol_sjsonb.h"
 
-#include <hiredis.h>
-
 #define __THIS_FILE__       "src/modules/mod_app_sjsonb.c"
 
 
@@ -27,18 +25,23 @@ static void exit_sjsonb_module(lts_module_t *module)
 }
 
 
+static void sjsonb_on_connected(lts_socket_t *s)
+{
+    fprintf(stderr, "new connection....\n");
+    return;
+}
+
+
 static void sjsonb_service(lts_socket_t *s)
 {
     lts_sjson_t *sjson;
     lts_buffer_t *rb = s->conn->rbuf;
     lts_buffer_t *sb = s->conn->sbuf;
     lts_pool_t *pool;
-    redisContext *rds;
 
     // 用于json处理的内存无法复用，每个请求使用新的内存池处理
     // 将来可以使用池中池解决
     pool = lts_create_pool(4096);
-    rds = redisConnect("127.0.0.1", 6379);
 
     sjson = lts_proto_sjsonb_decode(rb, pool);
     if (NULL == sjson) {
@@ -64,6 +67,7 @@ static void sjsonb_send_more(lts_socket_t *s)
 
 
 static lts_app_module_itfc_t sjsonb_itfc = {
+    &sjsonb_on_connected,
     &sjsonb_service,
     &sjsonb_send_more,
 };

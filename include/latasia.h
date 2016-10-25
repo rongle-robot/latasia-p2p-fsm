@@ -83,6 +83,7 @@ struct lts_event_module_itfc_s {
 
 // app模块接口
 struct lts_app_module_itfc_s {
+    void (*on_connected)(lts_socket_t *);
     void (*service)(lts_socket_t *);
     void (*send_more)(lts_socket_t *);
 };
@@ -112,7 +113,7 @@ extern lts_module_t lts_app_asyn_backend_module; // 异步后端框架模块
 extern lts_module_t lts_app_echo_module; // echo模块
 extern lts_module_t lts_app_http_core_module; // http core模块
 extern lts_module_t lts_app_sjsonb_module; // sjsonb协议demo模块
-extern lts_module_t lts_app_p2p_fsm_module; // p2p逻辑控制模块
+extern lts_module_t lts_app_p2p_fsm_module; // p2p协议控制模块
 // }} app模块
 
 extern lts_socket_t *lts_channels[LTS_MAX_PROCESSES];

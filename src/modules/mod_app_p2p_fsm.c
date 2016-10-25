@@ -25,6 +25,11 @@ static void exit_p2p_fsm_module(lts_module_t *module)
 }
 
 
+static void p2p_fsm_on_connected(lts_socket_t *s)
+{
+    return;
+}
+
 static void p2p_fsm_service(lts_socket_t *s)
 {
     lts_sjson_t *sjson;
@@ -60,6 +65,7 @@ static void p2p_fsm_send_more(lts_socket_t *s)
 
 
 static lts_app_module_itfc_t p2p_fsm_itfc = {
+    &p2p_fsm_on_connected,
     &p2p_fsm_service,
     &p2p_fsm_send_more,
 };
