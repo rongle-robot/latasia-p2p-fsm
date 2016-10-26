@@ -86,8 +86,7 @@ static void p2p_fsm_on_connected(lts_socket_t *s)
     rds = redisConnect(lts_p2p_fsm_conf.redis_host,
                        lts_p2p_fsm_conf.redis_port);
     if (rds->err) {
-        fprintf(stderr, "redis failed\n");
-
+        // log
 		imply_closing(s);
 
         redisFree(rds);
@@ -101,8 +100,18 @@ static void p2p_fsm_on_connected(lts_socket_t *s)
 
 static void p2p_fsm_on_closing(lts_socket_t *s)
 {
-    redisContext *s_rds;
-    fprintf(stderr, "closing...\n");
+    redisContext *rds;
+
+    rds = redisConnect(lts_p2p_fsm_conf.redis_host,
+                       lts_p2p_fsm_conf.redis_port);
+    if (rds->err) {
+        // log
+
+        redisFree(rds);
+        return;
+    }
+
+    redisFree(rds);
     return;
 }
 
