@@ -44,7 +44,6 @@ static void cb_port_match(void *c,
     port[v->len] = 0x00;
 
     lts_p2p_fsm_conf.redis_port = atoi(port);
-    fprintf(stderr, "redis_port:%d\n", lts_p2p_fsm_conf.redis_port);
 
     return;
 }

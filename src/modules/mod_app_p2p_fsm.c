@@ -61,7 +61,7 @@ static int init_p2p_fsm_module(lts_module_t *module)
     module->pool = pool;
 
 	// 加载模块配置
-    if (-1 == load_p2p_fsm_config(&lts_asyn_conf, pool)) {
+    if (-1 == load_p2p_fsm_config(&lts_p2p_fsm_conf, pool)) {
         (void)lts_write_logger(
             &lts_stderr_logger, LTS_LOG_WARN,
             "%s:load app module config failed, using default\n",
@@ -82,17 +82,35 @@ static void exit_p2p_fsm_module(lts_module_t *module)
 static void p2p_fsm_on_connected(lts_socket_t *s)
 {
     redisContext *rds;
+    lts_pool_t *pool;
+    lts_sjson_t sjson;
+    struct sockaddr_in *si = (struct sockaddr_in *)s->peer_addr;
+    lts_str_t output;
 
     rds = redisConnect(lts_p2p_fsm_conf.redis_host,
                        lts_p2p_fsm_conf.redis_port);
-    if (rds->err) {
+    if (NULL == rds || rds->err) {
         // log
 		imply_closing(s);
 
-        redisFree(rds);
+        if (rds) {
+            redisFree(rds);
+        }
+
         return;
     }
 
+    pool = lts_create_pool(4096);
+    sjson = lts_empty_sjson(pool);
+
+    lts_sjson_add_kv(&sjson, "tcp_port", lts_uint322cstr(ntohs(si->sin_port)));
+    lts_sjson_encode(&sjson, &output);
+
+    (redisReply*)redisCommand(rds, "auth %s", lts_p2p_fsm_conf.redis_auth);
+    (redisReply*)redisCommand(rds, "set %s %s",
+                              lts_inet_ntoa(si->sin_addr), output.data);
+
+    lts_destroy_pool(pool);
     redisFree(rds);
     return;
 }
@@ -101,15 +119,23 @@ static void p2p_fsm_on_connected(lts_socket_t *s)
 static void p2p_fsm_on_closing(lts_socket_t *s)
 {
     redisContext *rds;
+    struct sockaddr_in *si = (struct sockaddr_in *)s->peer_addr;
 
     rds = redisConnect(lts_p2p_fsm_conf.redis_host,
                        lts_p2p_fsm_conf.redis_port);
-    if (rds->err) {
+    if (NULL == rds || rds->err) {
         // log
+		imply_closing(s);
 
-        redisFree(rds);
+        if (rds) {
+            redisFree(rds);
+        }
+
         return;
     }
+
+    (redisReply*)redisCommand(rds, "auth %s", lts_p2p_fsm_conf.redis_auth);
+    (redisReply*)redisCommand(rds, "del %s", lts_inet_ntoa(si->sin_addr));
 
     redisFree(rds);
     return;
@@ -123,8 +149,8 @@ static void p2p_fsm_service(lts_socket_t *s)
     lts_buffer_t *sb = s->conn->sbuf;
     lts_pool_t *pool;
 
-    // 用于json处理的内存无法复用，每个请求使用新的内存池处理
-    // 将来可以使用池中池解决
+    // 用于json处理的暂时内存无法复用，每个请求使用新的内存池处理
+    // 将来可以使用增加重置内存池解决
     pool = lts_create_pool(4096);
 
     sjson = lts_proto_sjsonb_decode(rb, pool);
@@ -133,9 +159,7 @@ static void p2p_fsm_service(lts_socket_t *s)
         return;
     }
 
-    lts_str_t key = lts_string("lala");
-    lts_str_t val = lts_string("tiannalu");
-    lts_sjson_add_kv(sjson, &key, &val);
+    lts_sjson_add_kv(sjson, "lala", "tiannalu");
     fprintf(stderr, "get json\n");
     fprintf(stderr, "%d\n", lts_proto_sjsonb_encode(sjson, sb));
 
