@@ -43,6 +43,7 @@ static int __tcp_session_init(tcp_session_t *ts, lts_str_t *session)
     ts->pool = pool;
     ts->auth_token = lts_str_clone(session, pool);
     ts->rbnode = RB_NODE;
+    RB_CLEAR_NODE(&ts->rbnode);
 
     return 0;
 }
@@ -278,10 +279,13 @@ static void p2p_fsm_service(lts_socket_t *s)
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_login_v)) {
         // 登录
         lts_str_t auth = lts_string("FjgGaashga");
-        tcp_session_t *ts1 = alloc_ts_instance(&auth);
-        tcp_session_t *ts2 = alloc_ts_instance(&auth);
-        tcp_session_t *ts3 = alloc_ts_instance(&auth);
-        fprintf(stderr, "%p,%p,%p\n", ts1, ts2, ts3);
+        tcp_session_t *ts;
+
+        ts = alloc_ts_instance(&auth);
+        assert(0 == lts_hashset_add(&s_ts_set, ts));
+        assert(ts == lts_hashset_get(&s_ts_set, ts));
+        lts_hashset_del(&s_ts_set, ts);
+        free_ts_instance(ts);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_logout_v)) {
         // 注销
     } else {
