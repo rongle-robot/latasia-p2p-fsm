@@ -267,7 +267,9 @@ static void p2p_fsm_service(lts_socket_t *s)
     static lts_str_t itfc_heartbeat_v = lts_string("heartbeat");
     static lts_str_t itfc_login_v = lts_string("login");
     static lts_str_t itfc_logout_v = lts_string("logout");
+    static lts_str_t itfc_p2p_v = lts_string("p2p");
     static lts_str_t auth_k = lts_string("auth");
+    static lts_str_t peer_auth_k = lts_string("peer_auth");
 
     lts_sjson_t *sjson;
     lts_buffer_t *rb = s->conn->rbuf;
@@ -328,6 +330,10 @@ static void p2p_fsm_service(lts_socket_t *s)
         (void)lts_rbmap_add(&s_ts_set, &ts->map_node);
 
         make_response("0", "success", sb, pool);
+    } else if (0 == lts_str_compare(&kv_interface->val, &itfc_p2p_v)) {
+        tcp_session_t *ts, *ts_peer;
+
+        fprintf(stderr, "p2p\n");
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_logout_v)) {
         // 注销
         tcp_session_t *ts;
