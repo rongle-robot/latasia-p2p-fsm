@@ -1,6 +1,7 @@
 #include <zlib.h>
 #include <arpa/inet.h>
 #include <dirent.h>
+#include <pthread.h>
 
 #include <strings.h>
 
@@ -30,6 +31,7 @@
 
 
 extern uintptr_t time33(void *str, size_t len);
+extern void *subscribe_thread(void *arg); // 订阅线程回调
 
 
 typedef struct {
@@ -93,17 +95,18 @@ static void free_ts_instance(tcp_session_t *ts)
 }
 
 
+static pthread_t s_sub_tid; // 订阅线程
 static redisContext *s_rds; // redis连接
-static redisContext *redisCheckConnection(void)
+redisContext *redisCheckConnection(redisContext *rds)
 {
     redisReply *reply;
 
-    if (NULL == s_rds) {
+    if (NULL == rds) {
         return NULL;
     }
 
     // 测试连接是否可用
-    reply = redisCommand(s_rds, "auth %s", lts_p2p_fsm_conf.redis_auth);
+    reply = redisCommand(rds, "auth %s", lts_p2p_fsm_conf.redis_auth);
     if (reply) {
         if (REDIS_REPLY_STATUS == reply->type) {
             lts_str_t status = {(uint8_t *)reply->str, reply->len};
@@ -111,44 +114,41 @@ static redisContext *redisCheckConnection(void)
 
             if (0 == lts_str_compare(&ok, &status)) {
                 freeReplyObject(reply);
-                return s_rds;
+                return rds;
             }
         }
 
         freeReplyObject(reply);
     }
 
-    // check error in s_rds->err
+    // check error in rds->err
 
     return NULL;
 }
-static redisContext *redisGetConnection(void)
+redisContext *redisGetConnection(void)
 {
-    if (s_rds) {
-        redisFree(s_rds);
-        s_rds = NULL;
-    }
+    redisContext *rds;
 
     // set up a new connection
-    s_rds = redisConnect(lts_p2p_fsm_conf.redis_host,
+    rds = redisConnect(lts_p2p_fsm_conf.redis_host,
                          lts_p2p_fsm_conf.redis_port);
-    if (NULL == s_rds || s_rds->err) {
+    if (NULL == rds || rds->err) {
         // log
         (void)lts_write_logger(
             &lts_stderr_logger, LTS_LOG_ERROR,
             "%s:connect to redis failed, %s\n",
-            STR_LOCATION, s_rds->errstr
+            STR_LOCATION, rds->errstr
         );
 
-        if (s_rds) {
-            redisFree(s_rds);
+        if (rds) {
+            redisFree(rds);
         }
         return NULL;
     }
 
-    (void)redisCommand(s_rds, "auth %s", lts_p2p_fsm_conf.redis_auth);
+    (void)redisCommand(rds, "auth %s", lts_p2p_fsm_conf.redis_auth);
 
-    return s_rds;
+    return rds;
 }
 
 
@@ -214,8 +214,17 @@ static int init_p2p_fsm_module(lts_module_t *module)
 
     // redis连接
     s_rds = redisGetConnection();
+    if (NULL == s_rds) {
+        return -1;
+    }
 
-    // 初始化
+    // 订阅线程
+    if (-1 == pthread_create(&s_sub_tid, NULL, &subscribe_thread, NULL)) {
+        // log
+        return -1;
+    }
+
+    // tcp session
     s_ts_set = lts_rbmap_entity;
     dlist_init(&s_ts_cachelst);
     dlist_init(&s_ts_uselst);
