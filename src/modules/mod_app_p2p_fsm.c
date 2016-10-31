@@ -9,7 +9,7 @@
 #include "conf.h"
 #include "protocol_sjsonb.h"
 #include "rbt_timer.h"
-#include "hashset.h"
+#include "rbmap.h"
 
 #include <hiredis.h>
 
@@ -25,16 +25,19 @@
 } while (0)
 
 
+extern uintptr_t time33(void *str, size_t len);
+
+
 typedef struct {
     lts_pool_t *pool;
     lts_str_t *auth_token;
-    lts_rb_node_t rbnode;
+    lts_rbmap_node_t map_node;
     lts_socket_t *conn;
     dlist_t dlnode;
 } tcp_session_t;
 static dlist_t s_ts_cachelst;
 static dlist_t s_ts_uselst;
-static lts_hashset_t s_ts_set; // 登录用户集合
+static lts_rbmap_t s_ts_set; // 登录用户集合
 
 static int __tcp_session_init(tcp_session_t *ts, lts_str_t *session)
 {
@@ -42,8 +45,9 @@ static int __tcp_session_init(tcp_session_t *ts, lts_str_t *session)
 
     ts->pool = pool;
     ts->auth_token = lts_str_clone(session, pool);
-    ts->rbnode = RB_NODE;
-    RB_CLEAR_NODE(&ts->rbnode);
+    lts_rbmap_node_init(
+        &ts->map_node, time33(session->data, session->len)
+    );
 
     return 0;
 }
@@ -83,24 +87,6 @@ static void free_ts_instance(tcp_session_t *ts)
     dlist_add_tail(&s_ts_cachelst, &ts->dlnode);
 
     return;
-}
-
-
-// hash
-static uint32_t __time33(char const *str, ssize_t len)
-{
-    uint32_t hash = 0;
-
-    for (size_t i = 0; i < len; ++i) {
-        hash = hash *33 + (uint32_t)str[i];
-    }
-
-    return hash;
-}
-static uint32_t tcp_session_hash(void *arg)
-{
-    tcp_session_t *ts = (tcp_session_t *)arg;
-    return __time33((char const *)ts->auth_token->data, ts->auth_token->len);
 }
 
 
@@ -152,7 +138,7 @@ static int init_p2p_fsm_module(lts_module_t *module)
     }
 
     // 初始化
-    s_ts_set = lts_hashset_entity(tcp_session_t, rbnode, &tcp_session_hash);
+    s_ts_set = lts_rbmap_entity;
     dlist_init(&s_ts_cachelst);
     dlist_init(&s_ts_uselst);
 
@@ -279,12 +265,14 @@ static void p2p_fsm_service(lts_socket_t *s)
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_login_v)) {
         // 登录
         lts_str_t auth = lts_string("FjgGaashga");
-        tcp_session_t *ts;
+        tcp_session_t *ts, *pts;
 
         ts = alloc_ts_instance(&auth);
-        assert(0 == lts_hashset_add(&s_ts_set, ts));
-        assert(ts == lts_hashset_get(&s_ts_set, ts));
-        lts_hashset_del(&s_ts_set, ts);
+        lts_rbmap_add(&s_ts_set, &ts->map_node);
+        pts = CONTAINER_OF(
+            lts_rbmap_get(&s_ts_set, time33(auth.data, auth.len)),
+            tcp_session_t, map_node);
+        assert(pts==ts);
         free_ts_instance(ts);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_logout_v)) {
         // 注销
