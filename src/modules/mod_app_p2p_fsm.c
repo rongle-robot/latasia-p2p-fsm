@@ -93,6 +93,65 @@ static void free_ts_instance(tcp_session_t *ts)
 }
 
 
+static redisContext *s_rds; // redis连接
+static redisContext *redisCheckConnection(void)
+{
+    redisReply *reply;
+
+    if (NULL == s_rds) {
+        return NULL;
+    }
+
+    // 测试连接是否可用
+    reply = redisCommand(s_rds, "auth %s", lts_p2p_fsm_conf.redis_auth);
+    if (reply) {
+        if (REDIS_REPLY_STATUS == reply->type) {
+            lts_str_t status = {(uint8_t *)reply->str, reply->len};
+            lts_str_t ok = lts_string("OK");
+
+            if (0 == lts_str_compare(&ok, &status)) {
+                freeReplyObject(reply);
+                return s_rds;
+            }
+        }
+
+        freeReplyObject(reply);
+    }
+
+    // check error in s_rds->err
+
+    return NULL;
+}
+static redisContext *redisGetConnection(void)
+{
+    if (s_rds) {
+        redisFree(s_rds);
+        s_rds = NULL;
+    }
+
+    // set up a new connection
+    s_rds = redisConnect(lts_p2p_fsm_conf.redis_host,
+                         lts_p2p_fsm_conf.redis_port);
+    if (NULL == s_rds || s_rds->err) {
+        // log
+        (void)lts_write_logger(
+            &lts_stderr_logger, LTS_LOG_ERROR,
+            "%s:connect to redis failed, %s\n",
+            STR_LOCATION, s_rds->errstr
+        );
+
+        if (s_rds) {
+            redisFree(s_rds);
+        }
+        return NULL;
+    }
+
+    (void)redisCommand(s_rds, "auth %s", lts_p2p_fsm_conf.redis_auth);
+
+    return s_rds;
+}
+
+
 // 加载模块配置
 static int load_p2p_fsm_config(lts_conf_p2p_fsm_t *conf, lts_pool_t *pool)
 {
@@ -153,6 +212,9 @@ static int init_p2p_fsm_module(lts_module_t *module)
         );
     }
 
+    // redis连接
+    s_rds = redisGetConnection();
+
     // 初始化
     s_ts_set = lts_rbmap_entity;
     dlist_init(&s_ts_cachelst);
@@ -171,66 +233,21 @@ static int init_p2p_fsm_module(lts_module_t *module)
 
 static void exit_p2p_fsm_module(lts_module_t *module)
 {
+    redisFree(s_rds);
+    s_rds = NULL;
+
     return;
 }
 
 
 static void p2p_fsm_on_connected(lts_socket_t *s)
 {
-    redisContext *rds;
-    lts_pool_t *pool;
-    lts_sjson_t sjson;
-    struct sockaddr_in *si = (struct sockaddr_in *)s->peer_addr;
-    lts_str_t output;
-
-    rds = redisConnect(lts_p2p_fsm_conf.redis_host,
-                       lts_p2p_fsm_conf.redis_port);
-    if (NULL == rds || rds->err) {
-        // log
-        fprintf(stderr, "no redis\n");
-
-        if (rds) {
-            redisFree(rds);
-        }
-
-        return;
-    }
-
-    pool = lts_create_pool(4096);
-    sjson = lts_empty_sjson(pool);
-
-    lts_sjson_add_kv(&sjson, "tcp_port", lts_uint322cstr(ntohs(si->sin_port)));
-    lts_sjson_encode(&sjson, &output);
-
-    (redisReply*)redisCommand(rds, "auth %s", lts_p2p_fsm_conf.redis_auth);
-    (redisReply*)redisCommand(rds, "set %s %s",
-                              lts_inet_ntoa(si->sin_addr), output.data);
-
-    lts_destroy_pool(pool);
-    redisFree(rds);
     return;
 }
 
 
 static void p2p_fsm_on_closing(lts_socket_t *s)
 {
-    redisContext *rds;
-    struct sockaddr_in *si = (struct sockaddr_in *)s->peer_addr;
-
-    rds = redisConnect(lts_p2p_fsm_conf.redis_host,
-                       lts_p2p_fsm_conf.redis_port);
-    if (NULL == rds || rds->err) {
-        if (rds) {
-            redisFree(rds);
-        }
-
-        return;
-    }
-
-    (redisReply*)redisCommand(rds, "auth %s", lts_p2p_fsm_conf.redis_auth);
-    (redisReply*)redisCommand(rds, "del %s", lts_inet_ntoa(si->sin_addr));
-
-    redisFree(rds);
     return;
 }
 
