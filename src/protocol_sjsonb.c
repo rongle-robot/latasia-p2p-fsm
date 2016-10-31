@@ -103,7 +103,7 @@ lts_sjson_t *lts_proto_sjsonb_decode(lts_buffer_t *buf, lts_pool_t *pool)
             || (header.content_ofst < LEN_HEADER)
             || ((header.content_len < LEN_MIN_CONTENT)
                 || header.content_len > 4096)) {
-            buf->seek += sizeof(uint32_t); // 丢弃该包头标识
+            buf->seek += sizeof(uint32_t); // 丢弃包头标识
             continue;
         }
 
@@ -125,8 +125,11 @@ lts_sjson_t *lts_proto_sjsonb_decode(lts_buffer_t *buf, lts_pool_t *pool)
     str_buf.len = header.content_len;
 
     if (-1 == lts_sjson_decode(&str_buf, rslt)) {
+        buf->seek += sizeof(uint32_t); // 丢弃包头标识
         return NULL;
     }
+
+    buf->seek += LEN_HEADER + header.content_len;
 
     return rslt;
 }

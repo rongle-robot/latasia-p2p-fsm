@@ -18,10 +18,14 @@
 
 
 // 重置定时器
-#define connection_retimer(s, v) do {\
+#define connection_retimer(s, v, ft) do {\
     lts_timer_heap_del(&lts_timer_heap, s);\
-    (s)->timeout = v;\
-    lts_timer_heap_add(&lts_timer_heap, s);\
+    if (ft) {\
+        (s)->timeoutable = 1;\
+    } else {\
+        (s)->timeout = v;\
+        lts_timer_heap_add(&lts_timer_heap, s);\
+    }\
 } while (0)
 
 
@@ -39,29 +43,28 @@ static dlist_t s_ts_cachelst;
 static dlist_t s_ts_uselst;
 static lts_rbmap_t s_ts_set; // 登录用户集合
 
-static int __tcp_session_init(tcp_session_t *ts, lts_str_t *session)
+static int __tcp_session_init(tcp_session_t *ts, lts_socket_t *skt,
+                              lts_str_t *session, lts_pool_t *pool)
 {
-    lts_pool_t *pool = lts_create_pool(4096);
-
     ts->pool = pool;
     ts->auth_token = lts_str_clone(session, pool);
     lts_rbmap_node_init(
         &ts->map_node, time33(session->data, session->len)
     );
+    ts->conn = skt;
 
     return 0;
 }
 static void __tcp_session_release(tcp_session_t *ts)
 {
-    if (ts->pool) {
-        lts_destroy_pool(ts->pool);
-        ts->pool = NULL;
-    }
+    ts->pool = NULL;
 
     return;
 }
 
-static tcp_session_t *alloc_ts_instance(lts_str_t *session)
+static tcp_session_t *alloc_ts_instance(
+    lts_socket_t *skt, lts_str_t *session, lts_pool_t *pool
+)
 {
     dlist_t *rslt;
     tcp_session_t *ts;
@@ -75,7 +78,7 @@ static tcp_session_t *alloc_ts_instance(lts_str_t *session)
     dlist_add_tail(&s_ts_uselst, rslt);
 
     ts = CONTAINER_OF(rslt, tcp_session_t, dlnode);
-    __tcp_session_init(ts, session);
+    __tcp_session_init(ts, skt, session, pool);
 
     return ts;
 }
@@ -111,6 +114,19 @@ static int load_p2p_fsm_config(lts_conf_p2p_fsm_t *conf, lts_pool_t *pool)
     close_conf_file(&lts_conf_file, addr, sz);
 
     return rslt;
+}
+
+
+static void make_response(char *error_no, char *error_msg,
+                          lts_buffer_t *sbuf, lts_pool_t *pool)
+{
+    lts_sjson_t rsp = lts_empty_sjson(pool);
+
+    lts_sjson_add_kv(&rsp, "errno", error_no);
+    lts_sjson_add_kv(&rsp, "errmsg", error_msg);
+    lts_proto_sjsonb_encode(&rsp, sbuf);
+
+    return;
 }
 
 
@@ -225,6 +241,7 @@ static void p2p_fsm_service(lts_socket_t *s)
     static lts_str_t itfc_heartbeat_v = lts_string("heartbeat");
     static lts_str_t itfc_login_v = lts_string("login");
     static lts_str_t itfc_logout_v = lts_string("logout");
+    static lts_str_t auth_k = lts_string("auth");
 
     lts_sjson_t *sjson;
     lts_buffer_t *rb = s->conn->rbuf;
@@ -238,44 +255,77 @@ static void p2p_fsm_service(lts_socket_t *s)
     sjson = lts_proto_sjsonb_decode(rb, pool);
     if (NULL == sjson) {
         // 非法请求
-        connection_retimer(s, 0);
+        connection_retimer(s, 0, TRUE);
         lts_destroy_pool(pool);
         return;
     }
 
     // 业务处理
     do {
-    lts_sjson_obj_node_t *interface; // 接口名
+    lts_sjson_obj_node_t *objnode; // 接口名
     lts_sjson_kv_t *kv_interface;
 
-    interface = lts_sjson_get_obj_node(sjson, &itfc_k);
-    if ((NULL == interface) || (STRING_VALUE != interface->node_type)) {
+    objnode = lts_sjson_get_obj_node(sjson, &itfc_k);
+    if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
         // 非法请求
-        connection_retimer(s, 0);
-        lts_destroy_pool(pool);
-        return;
+        connection_retimer(s, 0, TRUE);
+        break;
     }
-    kv_interface = CONTAINER_OF(interface, lts_sjson_kv_t, _obj_node);
+    kv_interface = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
+
+    // ======== 协议编码格式正确
 
     // 暂用if-else分发，将来使用hash或map
     if (0 == lts_str_compare(&kv_interface->val, &itfc_heartbeat_v)) {
         // 心跳
-        connection_retimer(s, s->timeout + 600); // 保持连接
-        lts_proto_sjsonb_encode(sjson, sb);
+        connection_retimer(s, s->timeout + 600, FALSE); // 保持连接
+        make_response("0", "success", sb, pool);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_login_v)) {
         // 登录
-        lts_str_t auth = lts_string("FjgGaashga");
-        tcp_session_t *ts, *pts;
+        tcp_session_t *ts;
+        lts_sjson_kv_t *kv_auth;
 
-        ts = alloc_ts_instance(&auth);
-        lts_rbmap_add(&s_ts_set, &ts->map_node);
-        pts = CONTAINER_OF(
-            lts_rbmap_get(&s_ts_set, time33(auth.data, auth.len)),
-            tcp_session_t, map_node);
-        assert(pts==ts);
-        free_ts_instance(ts);
+        objnode = lts_sjson_get_obj_node(sjson, &auth_k);
+        if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
+            make_response("400", "bad request", sb, pool);
+            break;
+        }
+        kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
+
+        ts = alloc_ts_instance(s, &kv_auth->val, pool);
+        if (NULL == ts) {
+            // out of resource
+            make_response("500", "server failed", sb, pool);
+            break;
+        }
+
+        (void)lts_rbmap_add(&s_ts_set, &ts->map_node);
+
+        make_response("0", "success", sb, pool);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_logout_v)) {
         // 注销
+        tcp_session_t *ts;
+        lts_rbmap_node_t *ts_node;
+        lts_sjson_kv_t *kv_auth;
+
+        objnode = lts_sjson_get_obj_node(sjson, &auth_k);
+        if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
+            make_response("400", "bad request", sb, pool);
+            break;
+        }
+        kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
+
+        ts_node = lts_rbmap_del(&s_ts_set,
+                                time33(kv_auth->val.data, kv_auth->val.len));
+        if (NULL == ts_node) {
+            make_response("404", "not exists", sb, pool);
+            break;
+        }
+
+        ts = CONTAINER_OF(ts_node, tcp_session_t, map_node);
+        free_ts_instance(ts);
+
+        make_response("0", "success", sb, pool);
     } else {
         // 不支持的接口
     }

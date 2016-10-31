@@ -30,6 +30,9 @@ if __name__ == "__main__":
         print e
         sys.exit(1)
 
-    cli.send(pack_sjsonb({"interface":"login",}))
+    cli.send(pack_sjsonb({"interface":"login", "auth":"token"}))
+    buf = cli.recv(4096)
+    print unpack_sjsonb(buf)
+    cli.send(pack_sjsonb({"interface":"logout", "auth":"token"}))
     buf = cli.recv(4096)
     print unpack_sjsonb(buf)
