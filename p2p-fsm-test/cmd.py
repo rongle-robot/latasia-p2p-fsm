@@ -22,19 +22,59 @@ def unpack_sjsonb(package):
     return cargo
 
 
-def on_exit(cmd, s):
+def on_heartbeat(arglist, skt):
+    skt.sendall(pack_sjsonb({"interface": "heartbeat",}))
+    print unpack_sjsonb(skt.recv(1024))
+    return False
+
+
+def on_exit(arglist, skt):
     return True
 
 
-def on_help(cmd, s):
+def on_help(arglist, skt):
     print "exit    -- exit"
     print "help    -- show this message"
+    print "heartbeat    -- keep tcp connection alive"
+    print "login auth   -- login"
+    print "logout auth   -- logout"
+    print "p2p auth peer_auth -- p2p request"
+    return False
+
+
+def on_login(arglist, skt):
+    try:
+        auth = arglist[0]
+    except IndexError:
+        print "argument 'auth' missing"
+        return False
+
+    skt.sendall(pack_sjsonb({"interface": "login", "auth": auth}))
+    print unpack_sjsonb(skt.recv(1024))
+
+    return False
+
+
+def on_logout(arglist, skt):
+    try:
+        auth = arglist[0]
+    except IndexError:
+        print "argument 'auth' missing"
+        return False
+
+    skt.sendall(pack_sjsonb({"interface": "logout", "auth": auth}))
+    print unpack_sjsonb(skt.recv(1024))
+
     return False
 
 
 if __name__ == "__main__":
     exit = False
-    cmdset = {"exit": on_exit, "help": on_help, }
+    cmdset = {
+        "heartbeat": on_heartbeat,
+        "exit": on_exit, "help": on_help,
+        "login": on_login, "logout": on_logout,
+    }
 
     cli = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -47,7 +87,7 @@ if __name__ == "__main__":
         print "> ",
 
         try:
-            cmd = raw_input()
+            cmd = raw_input().split()
         except EOFError:
             print ""
             break
@@ -55,7 +95,12 @@ if __name__ == "__main__":
             print ""
             break
 
+        if len(cmd) == 0:
+            continue
+
         try:
-            exit = cmdset[cmd](cmd, cli)
+            exit = cmdset[cmd[0]](cmd[1:], cli)
         except KeyError:
             print "unknonw command"
+
+    cli.close()

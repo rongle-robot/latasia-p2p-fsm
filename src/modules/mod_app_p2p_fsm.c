@@ -307,18 +307,26 @@ static void p2p_fsm_service(lts_socket_t *s)
     if (0 == lts_str_compare(&kv_interface->val, &itfc_heartbeat_v)) {
         // 心跳
         connection_retimer(s, s->timeout + 600, FALSE); // 保持连接
-        make_response("0", "success", sb, pool);
+        make_response("200", "success", sb, pool);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_login_v)) {
         // 登录
         tcp_session_t *ts;
+        lts_rbmap_node_t *ts_node;
         lts_sjson_kv_t *kv_auth;
 
         objnode = lts_sjson_get_obj_node(sjson, &auth_k);
         if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
-            make_response("400", "bad request", sb, pool);
+            make_response("421", "argument missing", sb, pool);
             break;
         }
         kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
+
+        ts_node = lts_rbmap_get(&s_ts_set,
+                                time33(kv_auth->val.data, kv_auth->val.len));
+        if (ts_node) {
+            make_response("424", "existed", sb, pool);
+            break;
+        }
 
         ts = alloc_ts_instance(s, &kv_auth->val, pool);
         if (NULL == ts) {
@@ -326,10 +334,9 @@ static void p2p_fsm_service(lts_socket_t *s)
             make_response("500", "server failed", sb, pool);
             break;
         }
-
         (void)lts_rbmap_add(&s_ts_set, &ts->map_node);
 
-        make_response("0", "success", sb, pool);
+        make_response("200", "success", sb, pool);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_p2p_v)) {
         tcp_session_t *ts, *ts_peer;
 
@@ -342,7 +349,7 @@ static void p2p_fsm_service(lts_socket_t *s)
 
         objnode = lts_sjson_get_obj_node(sjson, &auth_k);
         if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
-            make_response("400", "bad request", sb, pool);
+            make_response("421", "argument missing", sb, pool);
             break;
         }
         kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
@@ -350,16 +357,17 @@ static void p2p_fsm_service(lts_socket_t *s)
         ts_node = lts_rbmap_del(&s_ts_set,
                                 time33(kv_auth->val.data, kv_auth->val.len));
         if (NULL == ts_node) {
-            make_response("404", "not exists", sb, pool);
+            make_response("404", "not found", sb, pool);
             break;
         }
 
         ts = CONTAINER_OF(ts_node, tcp_session_t, map_node);
         free_ts_instance(ts);
 
-        make_response("0", "success", sb, pool);
+        make_response("200", "success", sb, pool);
     } else {
         // 不支持的接口
+        make_response("420", "unsupport interface", sb, pool);
     }
     } while (0);
 
