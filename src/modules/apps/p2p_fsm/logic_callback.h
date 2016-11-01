@@ -19,7 +19,4 @@
     (s)->timeout = v;\
     lts_timer_heap_add(&lts_timer_heap, s);\
 } while (0)
-
-
-void on_heartbeat(lts_sjson_t *sjson, lts_socket_t *s, lts_pool_t *pool);
 #endif // __APP_P2P_FSM_H__

@@ -1,10 +1,13 @@
 #include "common.h"
+#include <sys/types.h>
+#include <sys/socket.h>
 
 #include <hiredis.h>
 
 
 static redisContext *s_rds;
 
+int chan_sub[2]; // 订阅线程通道
 extern redisContext *redisGetConnection(void);
 extern redisContext *redisCheckConnection(redisContext *rds);
 
@@ -50,6 +53,8 @@ void *subscribe_thread(void *arg)
                 // 1: 订阅的主题名称
                 // 2: 推送的数据
                 fprintf(stderr, "%s\n", reply->element[2]->str);
+                uintptr_t x=123;
+                send(chan_sub[1], &x, sizeof(x), 0);
                 break;
 
             default:

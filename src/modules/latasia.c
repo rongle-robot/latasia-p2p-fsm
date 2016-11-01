@@ -387,11 +387,6 @@ void process_post_list(void)
         if (cs->writable && cs->do_write) {
             (*cs->do_write)(cs);
         }
-
-        // 再处理一次超时事件，有可能业务修改了定时器
-        if (cs->timeoutable && cs->do_timeout) {
-            (void)(*cs->do_timeout)(cs);
-        }
     }
 
     // 清理post链

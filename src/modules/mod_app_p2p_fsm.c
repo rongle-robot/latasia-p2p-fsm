@@ -2,6 +2,7 @@
 #include <arpa/inet.h>
 #include <dirent.h>
 #include <pthread.h>
+#include <sys/epoll.h>
 
 #include <strings.h>
 
@@ -21,6 +22,7 @@
 
 
 extern uintptr_t time33(void *str, size_t len);
+extern int chan_sub[2]; // 订阅线程通道
 extern void *subscribe_thread(void *arg); // 订阅线程回调
 
 
@@ -171,11 +173,28 @@ static int load_p2p_fsm_config(lts_conf_p2p_fsm_t *conf, lts_pool_t *pool)
 extern void make_simple_rsp(char *error_no, char *error_msg,
                             lts_buffer_t *sbuf, lts_pool_t *pool);
 
+
+static void on_channel_recv(lts_socket_t *cs)
+{
+    uintptr_t data_ptr;
+    ssize_t rcv_sz;
+
+    rcv_sz = recv(cs->fd, &data_ptr, sizeof(data_ptr), 0);
+    if (-1 == rcv_sz) {
+        // ignore errno
+        return;
+    }
+
+    fprintf(stderr, "channel recv: %lu\n", data_ptr);
+}
+
+
 static int init_p2p_fsm_module(lts_module_t *module)
 {
 #define TS_SIZE     2
 	lts_pool_t *pool;
     tcp_session_t *ats;
+    lts_socket_t *skt_chan_sub;
 
     // 创建模块内存池
     pool = lts_create_pool(MODULE_POOL_SIZE);
@@ -199,6 +218,24 @@ static int init_p2p_fsm_module(lts_module_t *module)
     if (NULL == s_rds) {
         return -1;
     }
+
+    // 创建通信管线
+    if (-1 == socketpair(AF_UNIX, SOCK_STREAM, 0, chan_sub)) {
+        // log
+        return -1;
+    }
+    if (lts_set_nonblock(chan_sub[0])) { // 0号用于主线程
+        // log
+    }
+    skt_chan_sub = lts_alloc_socket();
+    skt_chan_sub->fd = chan_sub[0];
+    skt_chan_sub->ev_mask = EPOLLIN; // 水平触发
+    skt_chan_sub->conn = NULL;
+    skt_chan_sub->do_read = &on_channel_recv;
+    skt_chan_sub->do_write = NULL;
+    skt_chan_sub->do_timeout = NULL;
+    skt_chan_sub->timeout = 0;
+    (lts_event_itfc->event_add)(skt_chan_sub); // 加入事件监控
 
     // 订阅线程
     if (-1 == pthread_create(&s_sub_tid, NULL, &subscribe_thread, NULL)) {
@@ -224,6 +261,9 @@ static int init_p2p_fsm_module(lts_module_t *module)
 
 static void exit_p2p_fsm_module(lts_module_t *module)
 {
+    (void)close(chan_sub[0]);
+    (void)close(chan_sub[1]);
+
     redisFree(s_rds);
     s_rds = NULL;
 
