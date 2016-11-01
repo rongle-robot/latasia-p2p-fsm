@@ -37,7 +37,9 @@ def on_help(arglist, skt):
     print "help    -- show this message"
     print "heartbeat    -- keep tcp connection alive"
     print "login auth   -- login"
-    print "logout auth   -- logout"
+    print "logout auth  -- logout"
+    print "talkto auth peer_auth    -- talk"
+    print "listen       -- listen"
     print "p2p auth peer_auth -- p2p request"
     return False
 
@@ -68,12 +70,50 @@ def on_logout(arglist, skt):
     return False
 
 
+def on_talkto(arglist, skt):
+    try:
+        auth = arglist[0]
+    except IndexError:
+        print "argument 'auth' missing"
+        return False
+
+    try:
+        peer_auth = arglist[1]
+    except IndexError:
+        print "argument 'peer_auth' missing"
+        return False
+
+    try:
+        message = arglist[2]
+    except IndexError:
+        print "argument 'message' missing"
+        return False
+
+    if auth == peer_auth:
+        print "talk to yourself? No..."
+        return False
+
+    skt.sendall(pack_sjsonb({"interface": "talkto", "auth": auth,
+                             "peer_auth": peer_auth, "message": message}))
+    recv_data = skt.recv(1024)
+    print recv_data
+    print unpack_sjsonb(recv_data)
+
+    return False
+
+
+def on_listen(arglist, skt):
+    print unpack_sjsonb(skt.recv(1024))
+    return False
+
+
 if __name__ == "__main__":
     exit = False
     cmdset = {
         "heartbeat": on_heartbeat,
         "exit": on_exit, "help": on_help,
         "login": on_login, "logout": on_logout,
+        "talkto": on_talkto, "listen": on_listen,
     }
 
     cli = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

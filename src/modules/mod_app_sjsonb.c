@@ -51,7 +51,7 @@ static void sjsonb_service(lts_socket_t *s)
 
     lts_sjson_add_kv(sjson, "lala", "tiannalu");
     fprintf(stderr, "get json\n");
-    fprintf(stderr, "%d\n", lts_proto_sjsonb_encode(sjson, sb));
+    fprintf(stderr, "%d\n", lts_proto_sjsonb_encode(sjson, sb, pool));
 
     lts_destroy_pool(pool);
     return;
