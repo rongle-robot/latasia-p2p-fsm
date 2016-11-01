@@ -96,7 +96,6 @@ def on_talkto(arglist, skt):
     skt.sendall(pack_sjsonb({"interface": "talkto", "auth": auth,
                              "peer_auth": peer_auth, "message": message}))
     recv_data = skt.recv(1024)
-    print recv_data
     print unpack_sjsonb(recv_data)
 
     return False

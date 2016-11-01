@@ -14,14 +14,10 @@
 #define E_SERVER_FAILED     "500"
 
 // 重置定时器
-#define connection_retimer(s, v, ft) do {\
+#define reset_timer(s, v) do {\
     lts_timer_heap_del(&lts_timer_heap, s);\
-    if (ft) {\
-        (s)->timeoutable = 1;\
-    } else {\
-        (s)->timeout = v;\
-        lts_timer_heap_add(&lts_timer_heap, s);\
-    }\
+    (s)->timeout = v;\
+    lts_timer_heap_add(&lts_timer_heap, s);\
 } while (0)
 
 

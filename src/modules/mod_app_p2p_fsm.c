@@ -267,7 +267,7 @@ static void p2p_fsm_service(lts_socket_t *s)
     sjson = lts_proto_sjsonb_decode(rb, pool);
     if (NULL == sjson) {
         // 非法请求
-        connection_retimer(s, 0, TRUE);
+        lts_soft_event(s, FALSE, TRUE);
         lts_destroy_pool(pool);
         return;
     }
@@ -280,7 +280,7 @@ static void p2p_fsm_service(lts_socket_t *s)
     objnode = lts_sjson_get_obj_node(sjson, &itfc_k);
     if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
         // 非法请求
-        connection_retimer(s, 0, TRUE);
+        lts_soft_event(s, FALSE, TRUE);
         break;
     }
     kv_interface = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
@@ -290,7 +290,7 @@ static void p2p_fsm_service(lts_socket_t *s)
     // 暂用if-else分发，将来使用hash或map
     if (0 == lts_str_compare(&kv_interface->val, &itfc_heartbeat_v)) {
         // 心跳
-        connection_retimer(s, s->timeout + 600, FALSE); // 保持连接
+        reset_timer(s, s->timeout + 600); // 保持连接
         make_simple_rsp(E_SUCCESS, "success", s->conn->sbuf, pool);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_login_v)) {
         // 登录
@@ -377,6 +377,7 @@ static void p2p_fsm_service(lts_socket_t *s)
             lts_sjson_add_kv(&rsp, "errmsg", "success");
             lts_sjson_add_kv(&rsp, "message", (char const *)str_msg->data);
             assert(0 == lts_proto_sjsonb_encode(&rsp, peer_sb, pool));
+            lts_soft_event(peer_ts->conn, 1, 0);
         } while (0);
         make_simple_rsp(E_SUCCESS, "success", sb, pool);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_p2p_v)) {
