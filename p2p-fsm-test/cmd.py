@@ -40,7 +40,7 @@ def on_help(arglist, skt):
     print "logout auth  -- logout"
     print "talkto auth peer_auth    -- talk"
     print "listen       -- listen"
-    print "p2p auth peer_auth -- p2p request"
+    print "p2p_init auth peer_auth -- init p2p"
     return False
 
 
@@ -106,6 +106,27 @@ def on_listen(arglist, skt):
     return False
 
 
+def on_p2p_init(arglist, skt):
+    try:
+        auth = arglist[0]
+    except IndexError:
+        print "argument 'auth' missing"
+        return False
+
+    try:
+        peer_auth = arglist[1]
+    except IndexError:
+        print "argument 'peer_auth' missing"
+        return False
+
+    skt.sendall(pack_sjsonb({"interface": "p2p_init", "auth": auth,
+                             "peer_auth": peer_auth}))
+    recv_data = skt.recv(1024)
+    print unpack_sjsonb(recv_data)
+
+    return False
+
+
 if __name__ == "__main__":
     exit = False
     cmdset = {
@@ -113,6 +134,7 @@ if __name__ == "__main__":
         "exit": on_exit, "help": on_help,
         "login": on_login, "logout": on_logout,
         "talkto": on_talkto, "listen": on_listen,
+        "p2p_init": on_p2p_init,
     }
 
     cli = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -26,7 +26,12 @@ extern int chan_sub[2]; // 订阅线程通道
 extern void *subscribe_thread(void *arg); // 订阅线程回调
 
 
+enum {
+    FSM_IDLE = 0, // 空闲态
+    FSM_P2P_INIT,
+};
 typedef struct {
+    uint32_t fsm_stat; // p2p穿透状态机
     lts_pool_t *pool; // 独立内存池
     lts_str_t *auth_token;
     lts_rbmap_node_t map_node;
@@ -41,6 +46,8 @@ static int __tcp_session_init(tcp_session_t *ts,
                               lts_socket_t *skt, lts_str_t *session)
 {
     lts_pool_t *pool = lts_create_pool(4096);
+
+    ts->fsm_stat = FSM_IDLE;
     ts->pool = pool;
     ts->auth_token = lts_str_clone(session, pool);
     lts_rbmap_node_init(
@@ -290,7 +297,7 @@ static void p2p_fsm_service(lts_socket_t *s)
     static lts_str_t itfc_login_v = lts_string("login");
     static lts_str_t itfc_logout_v = lts_string("logout");
     static lts_str_t itfc_talkto_v = lts_string("talkto");
-    static lts_str_t itfc_p2p_v = lts_string("p2p");
+    static lts_str_t itfc_p2p_init_v = lts_string("p2p_init");
     static lts_str_t auth_k = lts_string("auth");
     static lts_str_t peer_auth_k = lts_string("peer_auth");
     static lts_str_t talk_msg_k = lts_string("message");
@@ -408,7 +415,6 @@ static void p2p_fsm_service(lts_socket_t *s)
 
         // 推送消息
         peer_sb = peer_ts->conn->conn->sbuf;
-        peer_ts->conn->writable = 1;
         do {
             lts_sjson_t rsp = lts_empty_sjson(pool);
             lts_str_t *str_msg = lts_str_clone(&kv_msg->val, pool);
@@ -420,9 +426,57 @@ static void p2p_fsm_service(lts_socket_t *s)
             lts_soft_event(peer_ts->conn, 1, 0);
         } while (0);
         make_simple_rsp(E_SUCCESS, "success", sb, pool);
-    } else if (0 == lts_str_compare(&kv_interface->val, &itfc_p2p_v)) {
+    } else if (0 == lts_str_compare(&kv_interface->val, &itfc_p2p_init_v)) {
         // p2p
-        fprintf(stderr, "p2p\n");
+        tcp_session_t *ts;
+        lts_rbmap_node_t *ts_node;
+        lts_sjson_kv_t *kv_auth, *kv_peer_auth;
+
+        // 参数检查
+        objnode = lts_sjson_get_obj_node(sjson, &auth_k);
+        if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
+            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
+            break;
+        }
+        kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
+
+        objnode = lts_sjson_get_obj_node(sjson, &peer_auth_k);
+        if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
+            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
+            break;
+        }
+        kv_peer_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
+
+        // 登录检查
+        ts_node = lts_rbmap_get(&s_ts_set,
+                                time33(kv_auth->val.data, kv_auth->val.len));
+        if (NULL == ts_node) {
+            make_simple_rsp(E_NOT_EXIST, "not login", sb, pool);
+            break;
+        }
+        ts = CONTAINER_OF(ts_node, tcp_session_t, map_node);
+        ts_node = lts_rbmap_get(
+            &s_ts_set, time33(kv_peer_auth->val.data, kv_peer_auth->val.len)
+        );
+        if (NULL == ts_node) {
+            make_simple_rsp(E_NOT_EXIST, "peer not login", sb, pool);
+            break;
+        }
+
+        // 返回retinue信息并修改状态
+        ts->fsm_stat = FSM_P2P_INIT;
+
+        do {
+            lts_sjson_t rsp = lts_empty_sjson(pool);
+
+            lts_sjson_add_kv(&rsp, "errno", E_SUCCESS);
+            lts_sjson_add_kv(&rsp, "errmsg", "success");
+            lts_sjson_add_kv(&rsp, "retinue_master",
+                             lts_p2p_fsm_conf.retinue_master);
+            lts_sjson_add_kv(&rsp, "retinue_vice",
+                             lts_p2p_fsm_conf.retinue_vice);
+            assert(0 == lts_proto_sjsonb_encode(&rsp, sb, pool));
+        } while (0);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_logout_v)) {
         // 注销
         tcp_session_t *ts;

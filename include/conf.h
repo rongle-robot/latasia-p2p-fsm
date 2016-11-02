@@ -58,6 +58,8 @@ struct lts_conf_p2p_fsm_s {
     char *redis_host;
     int redis_port;
     char *redis_auth;
+    char *retinue_master;
+    char *retinue_vice;
 };
 
 
