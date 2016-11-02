@@ -24,7 +24,11 @@ def unpack_sjsonb(package):
 
 def on_heartbeat(arglist, skt):
     skt.sendall(pack_sjsonb({"interface": "heartbeat",}))
-    print unpack_sjsonb(skt.recv(1024))
+    data = skt.recv(1024)
+    if len(data) == 0:
+        print "connection closed by peer"
+        return False
+    print unpack_sjsonb(data)
     return False
 
 
@@ -51,7 +55,11 @@ def on_login(arglist, skt):
         return False
 
     skt.sendall(pack_sjsonb({"interface": "login", "auth": auth}))
-    print unpack_sjsonb(skt.recv(1024))
+    data = skt.recv(1024)
+    if len(data) == 0:
+        print "connection closed by peer"
+        return False
+    print unpack_sjsonb(data)
 
     return False
 
@@ -64,7 +72,11 @@ def on_logout(arglist, skt):
         return False
 
     skt.sendall(pack_sjsonb({"interface": "logout", "auth": auth}))
-    print unpack_sjsonb(skt.recv(1024))
+    data = skt.recv(1024)
+    if len(data) == 0:
+        print "connection closed by peer"
+        return False
+    print unpack_sjsonb(data)
 
     return False
 
@@ -94,14 +106,22 @@ def on_talkto(arglist, skt):
 
     skt.sendall(pack_sjsonb({"interface": "talkto", "auth": auth,
                              "peer_auth": peer_auth, "message": message}))
-    recv_data = skt.recv(1024)
-    print unpack_sjsonb(recv_data)
+    data = skt.recv(1024)
+    if len(data) == 0:
+        print "connection closed by peer"
+        return False
+    print data
+    #print unpack_sjsonb(data)
 
     return False
 
 
 def on_listen(arglist, skt):
-    print unpack_sjsonb(skt.recv(1024))
+    data = skt.recv(1024)
+    if len(data) == 0:
+        print "connection closed by peer"
+        return False
+    print unpack_sjsonb(data)
     return False
 
 

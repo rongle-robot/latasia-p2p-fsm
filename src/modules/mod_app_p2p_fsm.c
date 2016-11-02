@@ -446,17 +446,18 @@ static void p2p_fsm_service(lts_socket_t *s)
 
         ts = find_ts_by_auth(&kv_auth->val);
         if (ts) {
-            make_simple_rsp(E_EXIST, "existed", sb, pool);
-            break;
+            // 踢掉老连接
+            lts_soft_event(ts->conn, FALSE, TRUE);
+            ts->conn = s;
+        } else {
+            ts = alloc_ts_instance(s, &kv_auth->val);
+            if (NULL == ts) {
+                // out of resource
+                make_simple_rsp(E_SERVER_FAILED, "server failed", sb, pool);
+                break;
+            }
+            (void)lts_rbmap_add(&s_ts_set, &ts->map_node);
         }
-
-        ts = alloc_ts_instance(s, &kv_auth->val);
-        if (NULL == ts) {
-            // out of resource
-            make_simple_rsp(E_SERVER_FAILED, "server failed", sb, pool);
-            break;
-        }
-        (void)lts_rbmap_add(&s_ts_set, &ts->map_node);
 
         // 返回retinue信息并修改状态
         ts->fsm_stat = FSM_P2P_INIT;
