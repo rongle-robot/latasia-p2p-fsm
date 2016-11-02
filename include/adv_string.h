@@ -96,6 +96,9 @@ void lts_str_share(lts_str_t *dst, lts_str_t *src)
     dst->len = src->len;
 }
 
+// 小写转换
+// 注意：内存需要可写
+extern void lts_str_lowercase(lts_str_t *s);
 
 // 去除字符串前后空格
 extern void lts_str_trim(lts_str_t *str);

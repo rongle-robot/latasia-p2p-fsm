@@ -7,8 +7,11 @@
 
 
 typedef struct {
+    int retinue_master; // bool
     lts_pool_t *pool;
     lts_str_t *auth;
+    int port_restricted; // bool
+    int udp_port;
 } chanpack_t; //channel通信结构
 
 

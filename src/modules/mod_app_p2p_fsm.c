@@ -28,11 +28,24 @@ extern uintptr_t time33(void *str, size_t len);
 enum {
     FSM_IDLE = 0, // 空闲态
     FSM_P2P_INIT,
+    FSM_WAIT_RETINUE_MASTER,
+    FSM_WAIT_RETINUE_VICE,
+    FSM_NAT_ENSURE,
+};
+enum {
+    NAT_UNKNOWN = 0, // 未知NAT类型
+    NAT_SYMMETIC, // 对称型
+    NAT_PORT_RESTRICTED_CONE, // 端口受限锥型
+    NAT_RESTRICTED_CONE, // IP受限锥型
+    NAT_FULL_CONE, // 全锥型
 };
 typedef struct {
     uint32_t fsm_stat; // p2p穿透状态机
     lts_pool_t *pool; // 独立内存池
     lts_str_t *auth_token;
+    int port_restricted; // 是否端口受限
+    int pre_udp_port;
+    int nat_type; // nat类型
     lts_rbmap_node_t map_node;
     lts_socket_t *conn;
     dlist_t dlnode;
@@ -49,6 +62,9 @@ static int __tcp_session_init(tcp_session_t *ts,
     ts->fsm_stat = FSM_IDLE;
     ts->pool = pool;
     ts->auth_token = lts_str_clone(session, pool);
+    ts->port_restricted = FALSE;
+    ts->pre_udp_port = 0;
+    ts->nat_type = NAT_UNKNOWN;
     lts_rbmap_node_init(
         &ts->map_node, time33(session->data, session->len)
     );
@@ -92,6 +108,17 @@ static void free_ts_instance(tcp_session_t *ts)
     dlist_add_tail(&s_ts_cachelst, &ts->dlnode);
 
     return;
+}
+static tcp_session_t *find_ts_by_auth(lts_str_t *auth)
+{
+    lts_rbmap_node_t *ts_node;
+
+    ts_node = lts_rbmap_get(&s_ts_set, time33(auth->data, auth->len));
+    if (NULL == ts_node) {
+        return NULL;
+    }
+
+    return CONTAINER_OF(ts_node, tcp_session_t, map_node);
 }
 
 
@@ -184,6 +211,7 @@ static void on_channel_recv(lts_socket_t *cs)
 {
     ssize_t rcv_sz;
     chanpack_t *data_ptr;
+    tcp_session_t *ts;
 
     rcv_sz = recv(cs->fd, &data_ptr, sizeof(data_ptr), 0);
     if (-1 == rcv_sz) {
@@ -191,9 +219,74 @@ static void on_channel_recv(lts_socket_t *cs)
         return;
     }
 
-    fprintf(stderr, "channel recv: %p\n", data_ptr);
-    fprintf(stderr, "auth: %s\n", data_ptr->auth->data);
+    // 之后任何返回记得调用lts_destroy_pool(data_ptr->pool)
+
+    ts = find_ts_by_auth(data_ptr->auth);
+    if (NULL == ts) {
+        lts_destroy_pool(data_ptr->pool);
+        return;
+    }
+
+    // 状态机
+    switch (ts->fsm_stat) {
+    case FSM_P2P_INIT:
+        if (data_ptr->retinue_master) {
+            ts->fsm_stat = FSM_WAIT_RETINUE_VICE;
+            ts->port_restricted = data_ptr->port_restricted;
+            ts->pre_udp_port = data_ptr->udp_port;
+        } else {
+            ts->fsm_stat = FSM_WAIT_RETINUE_MASTER;
+            ts->pre_udp_port = data_ptr->udp_port;
+        }
+
+        break;
+
+    case FSM_WAIT_RETINUE_MASTER:
+        if (data_ptr->retinue_master) {
+            break;
+        }
+
+        if (ts->pre_udp_port != data_ptr->udp_port) {
+            ts->nat_type = NAT_SYMMETIC;
+        } else if (ts->port_restricted) {
+            ts->nat_type = NAT_PORT_RESTRICTED_CONE;
+        } else {
+            ts->nat_type = NAT_RESTRICTED_CONE;
+        }
+        ts->fsm_stat = FSM_NAT_ENSURE;
+
+        break;
+
+    case FSM_WAIT_RETINUE_VICE:
+        if (! data_ptr->retinue_master) {
+            break;
+        }
+
+        if (ts->pre_udp_port != data_ptr->udp_port) {
+            ts->nat_type = NAT_SYMMETIC;
+        } else if (ts->port_restricted) {
+            ts->nat_type = NAT_PORT_RESTRICTED_CONE;
+        } else {
+            ts->nat_type = NAT_RESTRICTED_CONE;
+        }
+        ts->fsm_stat = FSM_NAT_ENSURE;
+
+        break;
+
+    case FSM_NAT_ENSURE:
+        break;
+
+    default:
+        break;
+    }
+
+    if (FSM_NAT_ENSURE == ts->fsm_stat) {
+        // 下发p2p信息
+    }
+
     lts_destroy_pool(data_ptr->pool);
+
+    return;
 }
 
 
@@ -298,7 +391,6 @@ static void p2p_fsm_service(lts_socket_t *s)
     static lts_str_t itfc_login_v = lts_string("login");
     static lts_str_t itfc_logout_v = lts_string("logout");
     static lts_str_t itfc_talkto_v = lts_string("talkto");
-    static lts_str_t itfc_p2p_init_v = lts_string("p2p_init");
     static lts_str_t auth_k = lts_string("auth");
     static lts_str_t peer_auth_k = lts_string("peer_auth");
     static lts_str_t talk_msg_k = lts_string("message");
@@ -343,7 +435,6 @@ static void p2p_fsm_service(lts_socket_t *s)
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_login_v)) {
         // 登录
         tcp_session_t *ts;
-        lts_rbmap_node_t *ts_node;
         lts_sjson_kv_t *kv_auth;
 
         objnode = lts_sjson_get_obj_node(sjson, &auth_k);
@@ -353,9 +444,8 @@ static void p2p_fsm_service(lts_socket_t *s)
         }
         kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
 
-        ts_node = lts_rbmap_get(&s_ts_set,
-                                time33(kv_auth->val.data, kv_auth->val.len));
-        if (ts_node) {
+        ts = find_ts_by_auth(&kv_auth->val);
+        if (ts) {
             make_simple_rsp(E_EXIST, "existed", sb, pool);
             break;
         }
@@ -368,7 +458,19 @@ static void p2p_fsm_service(lts_socket_t *s)
         }
         (void)lts_rbmap_add(&s_ts_set, &ts->map_node);
 
-        make_simple_rsp(E_SUCCESS, "success", sb, pool);
+        // 返回retinue信息并修改状态
+        ts->fsm_stat = FSM_P2P_INIT;
+        do {
+            lts_sjson_t rsp = lts_empty_sjson(pool);
+
+            lts_sjson_add_kv(&rsp, "errno", E_SUCCESS);
+            lts_sjson_add_kv(&rsp, "errmsg", "success");
+            lts_sjson_add_kv(&rsp, "retinue_master",
+                             lts_p2p_fsm_conf.retinue_master);
+            lts_sjson_add_kv(&rsp, "retinue_vice",
+                             lts_p2p_fsm_conf.retinue_vice);
+            assert(0 == lts_proto_sjsonb_encode(&rsp, sb, pool));
+        } while (0);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_talkto_v)) {
         // talkto
         tcp_session_t *peer_ts;
@@ -427,57 +529,6 @@ static void p2p_fsm_service(lts_socket_t *s)
             lts_soft_event(peer_ts->conn, 1, 0);
         } while (0);
         make_simple_rsp(E_SUCCESS, "success", sb, pool);
-    } else if (0 == lts_str_compare(&kv_interface->val, &itfc_p2p_init_v)) {
-        // p2p
-        tcp_session_t *ts;
-        lts_rbmap_node_t *ts_node;
-        lts_sjson_kv_t *kv_auth, *kv_peer_auth;
-
-        // 参数检查
-        objnode = lts_sjson_get_obj_node(sjson, &auth_k);
-        if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
-            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
-            break;
-        }
-        kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
-
-        objnode = lts_sjson_get_obj_node(sjson, &peer_auth_k);
-        if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
-            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
-            break;
-        }
-        kv_peer_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
-
-        // 登录检查
-        ts_node = lts_rbmap_get(&s_ts_set,
-                                time33(kv_auth->val.data, kv_auth->val.len));
-        if (NULL == ts_node) {
-            make_simple_rsp(E_NOT_EXIST, "not login", sb, pool);
-            break;
-        }
-        ts = CONTAINER_OF(ts_node, tcp_session_t, map_node);
-        ts_node = lts_rbmap_get(
-            &s_ts_set, time33(kv_peer_auth->val.data, kv_peer_auth->val.len)
-        );
-        if (NULL == ts_node) {
-            make_simple_rsp(E_NOT_EXIST, "peer not login", sb, pool);
-            break;
-        }
-
-        // 返回retinue信息并修改状态
-        ts->fsm_stat = FSM_P2P_INIT;
-
-        do {
-            lts_sjson_t rsp = lts_empty_sjson(pool);
-
-            lts_sjson_add_kv(&rsp, "errno", E_SUCCESS);
-            lts_sjson_add_kv(&rsp, "errmsg", "success");
-            lts_sjson_add_kv(&rsp, "retinue_master",
-                             lts_p2p_fsm_conf.retinue_master);
-            lts_sjson_add_kv(&rsp, "retinue_vice",
-                             lts_p2p_fsm_conf.retinue_vice);
-            assert(0 == lts_proto_sjsonb_encode(&rsp, sb, pool));
-        } while (0);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_logout_v)) {
         // 注销
         tcp_session_t *ts;
@@ -499,6 +550,7 @@ static void p2p_fsm_service(lts_socket_t *s)
         }
 
         ts = CONTAINER_OF(ts_node, tcp_session_t, map_node);
+        ts->fsm_stat = FSM_IDLE;
         free_ts_instance(ts);
 
         make_simple_rsp(E_SUCCESS, "success", sb, pool);
