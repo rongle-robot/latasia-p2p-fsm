@@ -16,14 +16,13 @@
 #include <hiredis.h>
 
 #include "apps/p2p_fsm/logic_callback.h"
+#include "apps/p2p_fsm/subscribe_thread.h"
 
 #define CONF_FILE           "conf/mod_app.conf"
 #define __THIS_FILE__       "src/modules/mod_app_p2p_fsm.c"
 
 
 extern uintptr_t time33(void *str, size_t len);
-extern int chan_sub[2]; // 订阅线程通道
-extern void *subscribe_thread(void *arg); // 订阅线程回调
 
 
 enum {
@@ -183,8 +182,8 @@ extern void make_simple_rsp(char *error_no, char *error_msg,
 
 static void on_channel_recv(lts_socket_t *cs)
 {
-    uintptr_t data_ptr;
     ssize_t rcv_sz;
+    chanpack_t *data_ptr;
 
     rcv_sz = recv(cs->fd, &data_ptr, sizeof(data_ptr), 0);
     if (-1 == rcv_sz) {
@@ -192,7 +191,9 @@ static void on_channel_recv(lts_socket_t *cs)
         return;
     }
 
-    fprintf(stderr, "channel recv: %lu\n", data_ptr);
+    fprintf(stderr, "channel recv: %p\n", data_ptr);
+    fprintf(stderr, "auth: %s\n", data_ptr->auth->data);
+    lts_destroy_pool(data_ptr->pool);
 }
 
 
