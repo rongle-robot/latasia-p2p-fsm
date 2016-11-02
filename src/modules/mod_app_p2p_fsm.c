@@ -17,6 +17,7 @@
 
 #include "apps/p2p_fsm/logic_callback.h"
 #include "apps/p2p_fsm/subscribe_thread.h"
+#include "apps/p2p_fsm/udp_thread.h"
 
 #define CONF_FILE           "conf/mod_app.conf"
 #define __THIS_FILE__       "src/modules/mod_app_p2p_fsm.c"
@@ -123,6 +124,7 @@ static tcp_session_t *find_ts_by_auth(lts_str_t *auth)
 
 
 static pthread_t s_sub_tid; // 订阅线程
+static pthread_t s_udp_tid; // udp线程
 static redisContext *s_rds; // redis连接
 redisContext *redisCheckConnection(redisContext *rds)
 {
@@ -207,12 +209,13 @@ extern void make_simple_rsp(char *error_no, char *error_msg,
                             lts_buffer_t *sbuf, lts_pool_t *pool);
 
 
-static void on_channel_recv(lts_socket_t *cs)
+static void on_channel_sub(lts_socket_t *cs)
 {
     ssize_t rcv_sz;
     chanpack_t *data_ptr;
     tcp_session_t *ts;
 
+    cs->readable = 0;
     rcv_sz = recv(cs->fd, &data_ptr, sizeof(data_ptr), 0);
     if (-1 == rcv_sz) {
         // ignore errno
@@ -280,10 +283,6 @@ static void on_channel_recv(lts_socket_t *cs)
         break;
     }
 
-    if (FSM_NAT_ENSURE == ts->fsm_stat) {
-        // 下发p2p信息
-    }
-
     lts_destroy_pool(data_ptr->pool);
 
     return;
@@ -295,7 +294,7 @@ static int init_p2p_fsm_module(lts_module_t *module)
 #define TS_SIZE     2
 	lts_pool_t *pool;
     tcp_session_t *ats;
-    lts_socket_t *skt_chan_sub;
+    lts_socket_t *skt_chan_sub, *skt_chan_udp;
 
     // 创建模块内存池
     pool = lts_create_pool(MODULE_POOL_SIZE);
@@ -330,16 +329,39 @@ static int init_p2p_fsm_module(lts_module_t *module)
     }
     skt_chan_sub = lts_alloc_socket();
     skt_chan_sub->fd = chan_sub[0];
-    skt_chan_sub->ev_mask = EPOLLIN; // 水平触发
+    skt_chan_sub->ev_mask = EPOLLIN | EPOLLET;
     skt_chan_sub->conn = NULL;
-    skt_chan_sub->do_read = &on_channel_recv;
+    skt_chan_sub->do_read = &on_channel_sub;
     skt_chan_sub->do_write = NULL;
     skt_chan_sub->do_timeout = NULL;
     skt_chan_sub->timeout = 0;
     (lts_event_itfc->event_add)(skt_chan_sub); // 加入事件监控
 
+    if (-1 == socketpair(AF_UNIX, SOCK_STREAM, 0, chan_udp)) {
+        // log
+        return -1;
+    }
+    if (lts_set_nonblock(chan_udp[0])) { // 0号用于主线程
+        // log
+    }
+    skt_chan_udp = lts_alloc_socket();
+    skt_chan_udp->fd = chan_udp[0];
+    skt_chan_udp->ev_mask = EPOLLIN | EPOLLET;
+    skt_chan_udp->conn = NULL;
+    skt_chan_udp->do_read = &on_channel_udp;
+    skt_chan_udp->do_write = NULL;
+    skt_chan_udp->do_timeout = NULL;
+    skt_chan_udp->timeout = 0;
+    (lts_event_itfc->event_add)(skt_chan_udp); // 加入事件监控
+
     // 订阅线程
     if (-1 == pthread_create(&s_sub_tid, NULL, &subscribe_thread, NULL)) {
+        // log
+        return -1;
+    }
+
+    // udp线程
+    if (-1 == pthread_create(&s_udp_tid, NULL, &udp_thread, NULL)) {
         // log
         return -1;
     }
