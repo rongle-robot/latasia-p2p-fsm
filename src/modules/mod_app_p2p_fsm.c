@@ -67,6 +67,7 @@ static int __tcp_session_init(tcp_session_t *ts,
     ts->port_restricted = FALSE;
     ts->pre_udp_port = 0;
     ts->nat_type = NAT_UNKNOWN;
+    memset(&ts->udp_hole, 0, sizeof(ts->udp_hole));
     lts_rbmap_node_init(
         &ts->map_node, time33(session->data, session->len)
     );
@@ -319,7 +320,7 @@ static void on_channel_udp(lts_socket_t *cs)
 
 static int init_p2p_fsm_module(lts_module_t *module)
 {
-#define TS_SIZE     2
+#define TS_SIZE     65535
 	lts_pool_t *pool;
     tcp_session_t *ats;
     lts_socket_t *skt_chan_sub, *skt_chan_udp;
@@ -400,6 +401,12 @@ static int init_p2p_fsm_module(lts_module_t *module)
     dlist_init(&s_ts_uselst);
 
     ats = (tcp_session_t *)lts_palloc(pool, sizeof(tcp_session_t) * TS_SIZE);
+    if (NULL == ats) {
+        (void)lts_write_logger(&lts_file_logger, LTS_LOG_EMERGE,
+                               "%s:out of memory\n",STR_LOCATION);
+        return -1;
+    }
+
     for (int i = 0; i < TS_SIZE; ++i) {
         dlist_add_tail(&s_ts_cachelst, &ats->dlnode);
         ++ats;
@@ -441,8 +448,9 @@ static void p2p_fsm_service(lts_socket_t *s)
     static lts_str_t itfc_login_v = lts_string("login");
     static lts_str_t itfc_logout_v = lts_string("logout");
     static lts_str_t itfc_talkto_v = lts_string("talkto");
+    static lts_str_t itfc_getlinkinfo_v = lts_string("getlinkinfo");
     static lts_str_t auth_k = lts_string("auth");
-    static lts_str_t peer_auth_k = lts_string("peer_auth");
+    static lts_str_t peerauth_k = lts_string("peerauth");
     static lts_str_t talk_msg_k = lts_string("message");
 
     lts_sjson_t *sjson;
@@ -520,13 +528,12 @@ static void p2p_fsm_service(lts_socket_t *s)
                              lts_p2p_fsm_conf.retinue_master);
             lts_sjson_add_kv(&rsp, "retinue_vice",
                              lts_p2p_fsm_conf.retinue_vice);
-            assert(0 == lts_proto_sjsonb_encode(&rsp, sb, pool));
+            (void)lts_proto_sjsonb_encode(&rsp, sb, pool);
         } while (0);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_talkto_v)) {
         // talkto
         tcp_session_t *peer_ts;
-        lts_rbmap_node_t *ts_node;
-        lts_sjson_kv_t *kv_auth, *kv_peer_auth, *kv_msg;
+        lts_sjson_kv_t *kv_auth, *kv_peerauth, *kv_msg;
         lts_buffer_t *peer_sb;
 
         // 参数检查
@@ -537,12 +544,12 @@ static void p2p_fsm_service(lts_socket_t *s)
         }
         kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
 
-        objnode = lts_sjson_get_obj_node(sjson, &peer_auth_k);
+        objnode = lts_sjson_get_obj_node(sjson, &peerauth_k);
         if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
             make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
             break;
         }
-        kv_peer_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
+        kv_peerauth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
 
         objnode = lts_sjson_get_obj_node(sjson, &talk_msg_k);
         if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
@@ -552,20 +559,15 @@ static void p2p_fsm_service(lts_socket_t *s)
         kv_msg = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
 
         // 登录检查
-        ts_node = lts_rbmap_get(&s_ts_set,
-                                time33(kv_auth->val.data, kv_auth->val.len));
-        if (NULL == ts_node) {
+        if (NULL == find_ts_by_auth(&kv_auth->val)) {
             make_simple_rsp(E_NOT_EXIST, "not login", sb, pool);
             break;
         }
-        ts_node = lts_rbmap_get(
-            &s_ts_set, time33(kv_peer_auth->val.data, kv_peer_auth->val.len)
-        );
-        if (NULL == ts_node) {
+        peer_ts = find_ts_by_auth(&kv_peerauth->val);
+        if (NULL == peer_ts) {
             make_simple_rsp(E_NOT_EXIST, "peer not login", sb, pool);
             break;
         }
-        peer_ts = CONTAINER_OF(ts_node, tcp_session_t, map_node);
 
         // 推送消息
         peer_sb = peer_ts->conn->conn->sbuf;
@@ -576,10 +578,100 @@ static void p2p_fsm_service(lts_socket_t *s)
             lts_sjson_add_kv(&rsp, "errno", E_SUCCESS);
             lts_sjson_add_kv(&rsp, "errmsg", "success");
             lts_sjson_add_kv(&rsp, "message", (char const *)str_msg->data);
-            assert(0 == lts_proto_sjsonb_encode(&rsp, peer_sb, pool));
+            (void)lts_proto_sjsonb_encode(&rsp, peer_sb, pool);
             lts_soft_event(peer_ts->conn, 1, 0);
         } while (0);
         make_simple_rsp(E_SUCCESS, "success", sb, pool);
+    } else if (0 == lts_str_compare(&kv_interface->val,
+                                    &itfc_getlinkinfo_v)) {
+        // getlinkinfo
+        tcp_session_t *ts, *peer_ts;
+        lts_sjson_kv_t *kv_auth, *kv_peerauth;
+
+        // 参数检查
+        objnode = lts_sjson_get_obj_node(sjson, &auth_k);
+        if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
+            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
+            break;
+        }
+        kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
+
+        objnode = lts_sjson_get_obj_node(sjson, &peerauth_k);
+        if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
+            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
+            break;
+        }
+        kv_peerauth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
+
+        if (0 == lts_str_compare(&kv_auth->val, &kv_peerauth->val)) {
+            make_simple_rsp(E_INVALID_ARG,
+                            "auth equals to peerauth", sb, pool);
+            break;
+        }
+
+        // 登录检查
+        ts = find_ts_by_auth(&kv_auth->val);
+        if (NULL == ts) {
+            make_simple_rsp(E_NOT_EXIST, "not login", sb, pool);
+            break;
+        }
+        peer_ts = find_ts_by_auth(&kv_peerauth->val);
+        if (NULL == peer_ts) {
+            make_simple_rsp(E_NOT_EXIST, "peer not login", sb, pool);
+            break;
+        }
+
+        // 返回链路信息
+        do {
+            lts_sjson_t rsp = lts_empty_sjson(pool);
+
+            lts_sjson_add_kv(&rsp, "errno", E_SUCCESS);
+            lts_sjson_add_kv(&rsp, "errmsg", "success");
+            lts_sjson_add_kv(&rsp, "ip",
+                             lts_uint322cstr(ts->udp_hole.ip));
+            lts_sjson_add_kv(&rsp, "port",
+                             lts_uint322cstr(ts->udp_hole.port));
+            switch (ts->nat_type) {
+            case NAT_SYMMETIC:
+                lts_sjson_add_kv(&rsp, "nattype", "symmetic");
+                break;
+            case NAT_PORT_RESTRICTED_CONE:
+                lts_sjson_add_kv(&rsp, "nattype", "portrestricted");
+                break;
+            case NAT_RESTRICTED_CONE:
+                lts_sjson_add_kv(&rsp, "nattype", "restricted");
+                break;
+            case NAT_FULL_CONE:
+                lts_sjson_add_kv(&rsp, "nattype", "full");
+                break;
+            default:
+                lts_sjson_add_kv(&rsp, "nattype", "unknown");
+                break;
+            }
+            lts_sjson_add_kv(&rsp, "peerip",
+                             lts_uint322cstr(peer_ts->udp_hole.ip));
+            lts_sjson_add_kv(&rsp, "peerport",
+                             lts_uint322cstr(peer_ts->udp_hole.port));
+            switch (peer_ts->nat_type) {
+            case NAT_SYMMETIC:
+                lts_sjson_add_kv(&rsp, "peernattype", "symmetic");
+                break;
+            case NAT_PORT_RESTRICTED_CONE:
+                lts_sjson_add_kv(&rsp, "peernattype", "portrestricted");
+                break;
+            case NAT_RESTRICTED_CONE:
+                lts_sjson_add_kv(&rsp, "peernattype", "restricted");
+                break;
+            case NAT_FULL_CONE:
+                lts_sjson_add_kv(&rsp, "peernattype", "full");
+                break;
+            default:
+                lts_sjson_add_kv(&rsp, "peernattype", "unknown");
+                break;
+            }
+
+            (void)lts_proto_sjsonb_encode(&rsp, sb, pool);
+        } while (0);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_logout_v)) {
         // 注销
         tcp_session_t *ts;
