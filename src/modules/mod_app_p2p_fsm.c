@@ -505,6 +505,11 @@ static void p2p_fsm_service(lts_socket_t *s)
         ts = find_ts_by_auth(&kv_auth->val);
         if (ts) {
             // 踢掉老连接
+            if (s == ts->conn) {
+                make_simple_rsp(E_EXIST, "you are here", sb, pool);
+                break;
+            }
+
             lts_soft_event(ts->conn, FALSE, TRUE);
             ts->conn = s;
         } else {

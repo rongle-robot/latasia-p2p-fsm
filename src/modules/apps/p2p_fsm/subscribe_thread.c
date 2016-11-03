@@ -100,8 +100,6 @@ static void handl_title_vice(redisReply *reply)
     lts_sjson_kv_t *kv;
     lts_str_t *udp_port;
 
-    fprintf(stderr, "vicd\n");
-
     pool = lts_create_pool(4096);
     if (NULL == pool) {
         return;
