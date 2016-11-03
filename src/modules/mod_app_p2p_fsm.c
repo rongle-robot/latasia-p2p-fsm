@@ -47,6 +47,7 @@ typedef struct {
     int port_restricted; // 是否端口受限
     int pre_udp_port;
     int nat_type; // nat类型
+    udp_hole_t udp_hole; // udp穿透信息
     lts_rbmap_node_t map_node;
     lts_socket_t *conn;
     dlist_t dlnode;
@@ -205,24 +206,21 @@ static int load_p2p_fsm_config(lts_conf_p2p_fsm_t *conf, lts_pool_t *pool)
 }
 
 
-extern void make_simple_rsp(char *error_no, char *error_msg,
-                            lts_buffer_t *sbuf, lts_pool_t *pool);
-
-
 static void on_channel_sub(lts_socket_t *cs)
 {
     ssize_t rcv_sz;
-    chanpack_t *data_ptr;
+    sub_chanpack_t *data_ptr;
     tcp_session_t *ts;
 
-    cs->readable = 0;
     rcv_sz = recv(cs->fd, &data_ptr, sizeof(data_ptr), 0);
     if (-1 == rcv_sz) {
         // ignore errno
+        cs->readable = 0;
         return;
     }
 
-    // 之后任何返回记得调用lts_destroy_pool(data_ptr->pool)
+    // 之后任何返回记得调用lts_destroy_pool(data_ptr->pool)，而且销
+    // 毁内存池之后不得再访问data_ptr变量
 
     ts = find_ts_by_auth(data_ptr->auth);
     if (NULL == ts) {
@@ -286,6 +284,36 @@ static void on_channel_sub(lts_socket_t *cs)
     lts_destroy_pool(data_ptr->pool);
 
     return;
+}
+
+
+static void on_channel_udp(lts_socket_t *cs)
+{
+    ssize_t rcv_sz;
+    udp_chanpack_t *data_ptr;
+    tcp_session_t *ts;
+
+    rcv_sz = recv(cs->fd, &data_ptr, sizeof(data_ptr), 0);
+    if (-1 == rcv_sz) {
+        // ignore error
+        cs->readable = 0;
+        return;
+    }
+
+    // 之后任何返回记得调用lts_destroy_pool(data_ptr->pool)，而且销
+    // 毁内存池之后不得再访问data_ptr变量
+
+    fprintf(stderr, "udp data: %x, %d, %s\n", data_ptr->peer_addr.ip, data_ptr->peer_addr.port, data_ptr->auth->data);
+
+    ts = find_ts_by_auth(data_ptr->auth);
+    if (NULL == ts) {
+        lts_destroy_pool(data_ptr->pool);
+        return;
+    }
+
+    ts->udp_hole = data_ptr->peer_addr; // 更新穿透信息
+
+    lts_destroy_pool(data_ptr->pool);
 }
 
 

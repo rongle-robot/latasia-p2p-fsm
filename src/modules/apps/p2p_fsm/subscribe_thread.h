@@ -12,7 +12,7 @@ typedef struct {
     lts_str_t *auth;
     int port_restricted; // bool
     int udp_port;
-} chanpack_t; //channel通信结构
+} sub_chanpack_t; //channel通信结构
 
 
 extern int chan_sub[2]; // 订阅线程通道

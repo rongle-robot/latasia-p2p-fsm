@@ -26,7 +26,7 @@ int chan_sub[2]; // 订阅线程通道
 static void handl_title_master(redisReply *reply)
 {
     lts_pool_t *pool;
-    chanpack_t *data_ptr;
+    sub_chanpack_t *data_ptr;
     lts_str_t input;
     lts_sjson_t output;
     lts_sjson_obj_node_t *obj_node;
@@ -43,7 +43,7 @@ static void handl_title_master(redisReply *reply)
         reply->element[2]->len,
     };
     output = lts_empty_sjson(pool);
-    data_ptr = lts_palloc(pool, sizeof(chanpack_t));
+    data_ptr = lts_palloc(pool, sizeof(sub_chanpack_t));
 
     // json解析及填充结构数据
     if (-1 == lts_sjson_decode(&input, &output)) {
@@ -93,7 +93,7 @@ static void handl_title_master(redisReply *reply)
 static void handl_title_vice(redisReply *reply)
 {
     lts_pool_t *pool;
-    chanpack_t *data_ptr;
+    sub_chanpack_t *data_ptr;
     lts_str_t input;
     lts_sjson_t output;
     lts_sjson_obj_node_t *obj_node;
@@ -112,7 +112,7 @@ static void handl_title_vice(redisReply *reply)
         reply->element[2]->len,
     };
     output = lts_empty_sjson(pool);
-    data_ptr = lts_palloc(pool, sizeof(chanpack_t));
+    data_ptr = lts_palloc(pool, sizeof(sub_chanpack_t));
 
     // json解析及填充结构数据
     if (-1 == lts_sjson_decode(&input, &output)) {

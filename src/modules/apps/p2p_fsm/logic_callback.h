@@ -19,4 +19,8 @@
     (s)->timeout = v;\
     lts_timer_heap_add(&lts_timer_heap, s);\
 } while (0)
+
+
+extern void make_simple_rsp(char *error_no, char *error_msg,
+                            lts_buffer_t *sbuf, lts_pool_t *pool);
 #endif // __APP_P2P_FSM_H__
