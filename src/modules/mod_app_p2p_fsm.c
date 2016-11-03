@@ -304,8 +304,6 @@ static void on_channel_udp(lts_socket_t *cs)
     // 之后任何返回记得调用lts_destroy_pool(data_ptr->pool)，而且销
     // 毁内存池之后不得再访问data_ptr变量
 
-    fprintf(stderr, "udp data: %x, %d, %s\n", data_ptr->peer_addr.ip, data_ptr->peer_addr.port, data_ptr->auth->data);
-
     ts = find_ts_by_auth(data_ptr->auth);
     if (NULL == ts) {
         lts_destroy_pool(data_ptr->pool);

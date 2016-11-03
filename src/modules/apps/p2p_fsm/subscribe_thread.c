@@ -159,7 +159,6 @@ void *subscribe_thread(void *arg)
         }
 
         if (NULL == redisCheckConnection(s_rds)) {
-            fprintf(stderr, "invalid connection\n");
             redisFree(s_rds);
             s_rds = NULL;
             sleep(10);
