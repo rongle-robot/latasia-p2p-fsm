@@ -56,6 +56,12 @@ static dlist_t s_ts_cachelst;
 static dlist_t s_ts_uselst;
 static lts_rbmap_t s_ts_set; // 登录用户集合
 
+
+#define ts_change_skt(ts, skt)      do {\
+    (ts)->conn = skt;\
+    (skt)->app_ctx = ts; /* 底层保存的上下文数据用于反查 */\
+} while (0)
+
 static int __tcp_session_init(tcp_session_t *ts,
                               lts_socket_t *skt, lts_str_t *session)
 {
@@ -71,7 +77,7 @@ static int __tcp_session_init(tcp_session_t *ts,
     lts_rbmap_node_init(
         &ts->map_node, time33(session->data, session->len)
     );
-    ts->conn = skt;
+    ts_change_skt(ts, skt);
 
     return 0;
 }
@@ -435,6 +441,14 @@ static void p2p_fsm_on_connected(lts_socket_t *s)
 
 static void p2p_fsm_on_closing(lts_socket_t *s)
 {
+    tcp_session_t *ts;
+
+    ts = (tcp_session_t *)s->app_ctx;
+    if (ts) {
+        ts->conn = NULL;
+        s->app_ctx = NULL;
+    }
+
     return;
 }
 
@@ -505,8 +519,10 @@ static void p2p_fsm_service(lts_socket_t *s)
         if (ts) {
             // 踢掉老连接
             if (s != ts->conn) {
-                lts_soft_event(ts->conn, FALSE, TRUE);
-                ts->conn = s;
+                if (ts->conn) {
+                    lts_soft_event(ts->conn, FALSE, TRUE);
+                }
+                ts_change_skt(ts, s);
             }
         } else {
             ts = alloc_ts_instance(s, &kv_auth->val);

@@ -127,6 +127,7 @@ def on_getlinkinfo(arglist, skt):
         peerauth = arglist[1]
     except IndexError:
         print "argument 'peerauth' missing"
+        return False
 
     skt.sendall(pack_sjsonb({"interface": "getlinkinfo", "auth": auth,
                              "peerauth": peerauth,}))
@@ -160,6 +161,7 @@ if __name__ == "__main__":
 
     cli = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
+        # cli.connect(("192.168.160.4", 4321))
         cli.connect(("127.0.0.1", 4321))
     except socket.error as e:
         print e
