@@ -452,15 +452,15 @@ static void p2p_fsm_service(lts_socket_t *s)
     static lts_str_t talk_msg_k = lts_string("message");
 
     lts_sjson_t *sjson;
-    lts_buffer_t *rb = s->conn->rbuf;
-    lts_buffer_t *sb = s->conn->sbuf;
+    lts_buffer_t *rbuf = s->conn->rbuf;
+    lts_buffer_t *sbuf;
     lts_pool_t *pool;
 
     // 用于json处理的暂时内存无法复用，每个请求使用新的内存池处理
     // 将来可以使用内存池重置解决
     pool = lts_create_pool(4096);
 
-    sjson = lts_proto_sjsonb_decode(rb, pool);
+    sjson = lts_proto_sjsonb_decode(rbuf, pool);
     if (NULL == sjson) {
         // 非法请求
         lts_soft_event(s, FALSE, TRUE);
@@ -495,7 +495,8 @@ static void p2p_fsm_service(lts_socket_t *s)
 
         objnode = lts_sjson_get_obj_node(sjson, &auth_k);
         if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
-            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
+            make_simple_rsp(E_ARG_MISS, "argument missing",
+                            s->conn->sbuf, pool);
             break;
         }
         kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
@@ -511,7 +512,8 @@ static void p2p_fsm_service(lts_socket_t *s)
             ts = alloc_ts_instance(s, &kv_auth->val);
             if (NULL == ts) {
                 // out of resource
-                make_simple_rsp(E_SERVER_FAILED, "server failed", sb, pool);
+                make_simple_rsp(E_SERVER_FAILED, "server failed",
+                                s->conn->sbuf, pool);
                 break;
             }
             (void)lts_rbmap_add(&s_ts_set, &ts->map_node);
@@ -519,6 +521,7 @@ static void p2p_fsm_service(lts_socket_t *s)
 
         // 返回retinue信息并修改状态
         ts->fsm_stat = FSM_P2P_INIT;
+        sbuf = ts->conn->conn->sbuf;
         do {
             lts_sjson_t rsp = lts_empty_sjson(pool);
 
@@ -528,7 +531,7 @@ static void p2p_fsm_service(lts_socket_t *s)
                              lts_p2p_fsm_conf.retinue_master);
             lts_sjson_add_kv(&rsp, "retinue_vice",
                              lts_p2p_fsm_conf.retinue_vice);
-            (void)lts_proto_sjsonb_encode(&rsp, sb, pool);
+            (void)lts_proto_sjsonb_encode(&rsp, sbuf, pool);
         } while (0);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_talkto_v)) {
         // talkto
@@ -539,37 +542,43 @@ static void p2p_fsm_service(lts_socket_t *s)
         // 参数检查
         objnode = lts_sjson_get_obj_node(sjson, &auth_k);
         if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
-            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
+            make_simple_rsp(E_ARG_MISS, "argument missing",
+                            s->conn->sbuf, pool);
             break;
         }
         kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
 
         objnode = lts_sjson_get_obj_node(sjson, &peerauth_k);
         if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
-            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
+            make_simple_rsp(E_ARG_MISS, "argument missing",
+                            s->conn->sbuf, pool);
             break;
         }
         kv_peerauth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
 
         objnode = lts_sjson_get_obj_node(sjson, &talk_msg_k);
         if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
-            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
+            make_simple_rsp(E_ARG_MISS, "argument missing",
+                            s->conn->sbuf, pool);
             break;
         }
         kv_msg = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
 
         // 登录检查
         if (NULL == find_ts_by_auth(&kv_auth->val)) {
-            make_simple_rsp(E_NOT_EXIST, "not login", sb, pool);
+            make_simple_rsp(E_NOT_EXIST, "not login",
+                            s->conn->sbuf, pool);
             break;
         }
         peer_ts = find_ts_by_auth(&kv_peerauth->val);
         if (NULL == peer_ts) {
-            make_simple_rsp(E_NOT_EXIST, "peer not login", sb, pool);
+            make_simple_rsp(E_NOT_EXIST, "peer not login",
+                            s->conn->sbuf, pool);
             break;
         }
 
         // 推送消息
+        sbuf = s->conn->sbuf;
         peer_sb = peer_ts->conn->conn->sbuf;
         do {
             lts_sjson_t rsp = lts_empty_sjson(pool);
@@ -581,7 +590,7 @@ static void p2p_fsm_service(lts_socket_t *s)
             (void)lts_proto_sjsonb_encode(&rsp, peer_sb, pool);
             lts_soft_event(peer_ts->conn, 1, 0);
         } while (0);
-        make_simple_rsp(E_SUCCESS, "success", sb, pool);
+        make_simple_rsp(E_SUCCESS, "success", sbuf, pool);
     } else if (0 == lts_str_compare(&kv_interface->val,
                                     &itfc_getlinkinfo_v)) {
         // getlinkinfo
@@ -591,37 +600,42 @@ static void p2p_fsm_service(lts_socket_t *s)
         // 参数检查
         objnode = lts_sjson_get_obj_node(sjson, &auth_k);
         if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
-            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
+            make_simple_rsp(E_ARG_MISS, "argument missing",
+                            s->conn->sbuf, pool);
             break;
         }
         kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
 
         objnode = lts_sjson_get_obj_node(sjson, &peerauth_k);
         if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
-            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
+            make_simple_rsp(E_ARG_MISS, "argument missing",
+                            s->conn->sbuf, pool);
             break;
         }
         kv_peerauth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
 
         if (0 == lts_str_compare(&kv_auth->val, &kv_peerauth->val)) {
-            make_simple_rsp(E_INVALID_ARG,
-                            "auth equals to peerauth", sb, pool);
+            make_simple_rsp(E_INVALID_ARG, "auth equals to peerauth",
+                            s->conn->sbuf, pool);
             break;
         }
 
         // 登录检查
         ts = find_ts_by_auth(&kv_auth->val);
         if (NULL == ts) {
-            make_simple_rsp(E_NOT_EXIST, "not login", sb, pool);
+            make_simple_rsp(E_NOT_EXIST, "not login",
+                            s->conn->sbuf, pool);
             break;
         }
         peer_ts = find_ts_by_auth(&kv_peerauth->val);
         if (NULL == peer_ts) {
-            make_simple_rsp(E_NOT_EXIST, "peer not login", sb, pool);
+            make_simple_rsp(E_NOT_EXIST, "peer not login",
+                            s->conn->sbuf, pool);
             break;
         }
 
         // 返回链路信息
+        sbuf = ts->conn->conn->sbuf;
         do {
             lts_sjson_t rsp = lts_empty_sjson(pool);
 
@@ -670,7 +684,7 @@ static void p2p_fsm_service(lts_socket_t *s)
                 break;
             }
 
-            (void)lts_proto_sjsonb_encode(&rsp, sb, pool);
+            (void)lts_proto_sjsonb_encode(&rsp, sbuf, pool);
         } while (0);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_logout_v)) {
         // 注销
@@ -680,7 +694,8 @@ static void p2p_fsm_service(lts_socket_t *s)
 
         objnode = lts_sjson_get_obj_node(sjson, &auth_k);
         if ((NULL == objnode) || (STRING_VALUE != objnode->node_type)) {
-            make_simple_rsp(E_ARG_MISS, "argument missing", sb, pool);
+            make_simple_rsp(E_ARG_MISS, "argument missing",
+                            s->conn->sbuf, pool);
             break;
         }
         kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
@@ -688,7 +703,8 @@ static void p2p_fsm_service(lts_socket_t *s)
         ts_node = lts_rbmap_del(&s_ts_set,
                                 time33(kv_auth->val.data, kv_auth->val.len));
         if (NULL == ts_node) {
-            make_simple_rsp(E_NOT_EXIST, "not found", sb, pool);
+            make_simple_rsp(E_NOT_EXIST, "not found",
+                            s->conn->sbuf, pool);
             break;
         }
 
@@ -696,10 +712,11 @@ static void p2p_fsm_service(lts_socket_t *s)
         ts->fsm_stat = FSM_IDLE;
         free_ts_instance(ts);
 
-        make_simple_rsp(E_SUCCESS, "success", sb, pool);
+        make_simple_rsp(E_SUCCESS, "success", s->conn->sbuf, pool);
     } else {
         // 不支持的接口
-        make_simple_rsp(E_NOT_SUPPORT, "unsupport interface", sb, pool);
+        make_simple_rsp(E_NOT_SUPPORT, "unsupport interface",
+                        s->conn->sbuf, pool);
     }
     } while (0);
 
