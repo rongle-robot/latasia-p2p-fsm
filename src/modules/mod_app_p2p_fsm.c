@@ -588,7 +588,7 @@ static void p2p_fsm_service(lts_socket_t *s)
             break;
         }
         peer_ts = find_ts_by_auth(&kv_peerauth->val);
-        if (NULL == peer_ts) {
+        if ((NULL == peer_ts) || (NULL == peer_ts->conn)) {
             make_simple_rsp(E_NOT_EXIST, "peer not login",
                             s->conn->sbuf, pool);
             break;
@@ -651,7 +651,7 @@ static void p2p_fsm_service(lts_socket_t *s)
             break;
         }
         peer_ts = find_ts_by_auth(&kv_peerauth->val);
-        if (NULL == peer_ts) {
+        if ((NULL == peer_ts) || (NULL == peer_ts->conn)) {
             make_simple_rsp(E_NOT_EXIST, "peer not login",
                             s->conn->sbuf, pool);
             break;
