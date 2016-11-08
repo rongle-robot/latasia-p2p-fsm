@@ -551,7 +551,7 @@ static void p2p_fsm_service(lts_socket_t *s)
         } while (0);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_talkto_v)) {
         // talkto
-        tcp_session_t *peer_ts;
+        tcp_session_t *peer_ts, *ts;
         lts_sjson_kv_t *kv_auth, *kv_peerauth, *kv_msg;
         lts_buffer_t *peer_sb;
 
@@ -581,7 +581,8 @@ static void p2p_fsm_service(lts_socket_t *s)
         kv_msg = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
 
         // 登录检查
-        if (NULL == find_ts_by_auth(&kv_auth->val)) {
+        ts = find_ts_by_auth(&kv_auth->val);
+        if (NULL == ts) {
             make_simple_rsp(E_NOT_EXIST, "not login",
                             s->conn->sbuf, pool);
             break;
@@ -589,6 +590,12 @@ static void p2p_fsm_service(lts_socket_t *s)
         peer_ts = find_ts_by_auth(&kv_peerauth->val);
         if (NULL == peer_ts) {
             make_simple_rsp(E_NOT_EXIST, "peer not login",
+                            s->conn->sbuf, pool);
+            break;
+        }
+
+        if (s != ts->conn) {
+            make_simple_rsp(E_INVALID_ARG, "invalid session",
                             s->conn->sbuf, pool);
             break;
         }
@@ -646,6 +653,12 @@ static void p2p_fsm_service(lts_socket_t *s)
         peer_ts = find_ts_by_auth(&kv_peerauth->val);
         if (NULL == peer_ts) {
             make_simple_rsp(E_NOT_EXIST, "peer not login",
+                            s->conn->sbuf, pool);
+            break;
+        }
+
+        if (s != ts->conn) {
+            make_simple_rsp(E_INVALID_ARG, "invalid session",
                             s->conn->sbuf, pool);
             break;
         }
@@ -723,8 +736,14 @@ static void p2p_fsm_service(lts_socket_t *s)
                             s->conn->sbuf, pool);
             break;
         }
-
         ts = CONTAINER_OF(ts_node, tcp_session_t, map_node);
+
+        if (s != ts->conn) {
+            make_simple_rsp(E_INVALID_ARG, "invalid session",
+                            s->conn->sbuf, pool);
+            break;
+        }
+
         ts->fsm_stat = FSM_IDLE;
         free_ts_instance(ts);
 
