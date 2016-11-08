@@ -23,7 +23,7 @@ extern redisContext *redisCheckConnection(redisContext *rds);
 int chan_sub[2]; // 订阅线程通道
 
 
-static void handl_title_master(redisReply *reply)
+static void handle_title_master(redisReply *reply)
 {
     lts_pool_t *pool;
     sub_chanpack_t *data_ptr;
@@ -90,7 +90,7 @@ static void handl_title_master(redisReply *reply)
 }
 
 
-static void handl_title_vice(redisReply *reply)
+static void handle_title_vice(redisReply *reply)
 {
     lts_pool_t *pool;
     sub_chanpack_t *data_ptr;
@@ -190,9 +190,9 @@ void *subscribe_thread(void *arg)
                 // 1: 订阅的主题名称
                 // 2: 推送的数据
                 if (0 == strcmp(TITLE_MASTER, reply->element[1]->str)) {
-                    handl_title_master(reply);
+                    handle_title_master(reply);
                 } else if (0 == strcmp(TITLE_VICE, reply->element[1]->str)) {
-                    handl_title_vice(reply);
+                    handle_title_vice(reply);
                 } else {
                     do {} while (0);
                 }

@@ -28,10 +28,8 @@ extern uintptr_t time33(void *str, size_t len);
 
 enum {
     FSM_IDLE = 0, // 空闲态
-    FSM_P2P_INIT,
     FSM_WAIT_RETINUE_MASTER,
     FSM_WAIT_RETINUE_VICE,
-    FSM_NAT_ENSURE,
 };
 enum {
     NAT_UNKNOWN = 0, // 未知NAT类型
@@ -237,7 +235,7 @@ static void on_channel_sub(lts_socket_t *cs)
 
     // 状态机
     switch (ts->fsm_stat) {
-    case FSM_P2P_INIT:
+    case FSM_IDLE:
         if (data_ptr->retinue_master) {
             ts->fsm_stat = FSM_WAIT_RETINUE_VICE;
             ts->port_restricted = data_ptr->port_restricted;
@@ -250,22 +248,6 @@ static void on_channel_sub(lts_socket_t *cs)
         break;
 
     case FSM_WAIT_RETINUE_MASTER:
-        if (data_ptr->retinue_master) {
-            break;
-        }
-
-        if (ts->pre_udp_port != data_ptr->udp_port) {
-            ts->nat_type = NAT_SYMMETIC;
-        } else if (ts->port_restricted) {
-            ts->nat_type = NAT_PORT_RESTRICTED_CONE;
-        } else {
-            ts->nat_type = NAT_RESTRICTED_CONE;
-        }
-        ts->fsm_stat = FSM_NAT_ENSURE;
-
-        break;
-
-    case FSM_WAIT_RETINUE_VICE:
         if (! data_ptr->retinue_master) {
             break;
         }
@@ -277,11 +259,28 @@ static void on_channel_sub(lts_socket_t *cs)
         } else {
             ts->nat_type = NAT_RESTRICTED_CONE;
         }
-        ts->fsm_stat = FSM_NAT_ENSURE;
+
+        ts->fsm_stat = FSM_IDLE;
+        ts->pre_udp_port = 0;
 
         break;
 
-    case FSM_NAT_ENSURE:
+    case FSM_WAIT_RETINUE_VICE:
+        if (data_ptr->retinue_master) {
+            break;
+        }
+
+        if (ts->pre_udp_port != data_ptr->udp_port) {
+            ts->nat_type = NAT_SYMMETIC;
+        } else if (ts->port_restricted) {
+            ts->nat_type = NAT_PORT_RESTRICTED_CONE;
+        } else {
+            ts->nat_type = NAT_RESTRICTED_CONE;
+        }
+
+        ts->fsm_stat = FSM_IDLE;
+        ts->pre_udp_port = 0;
+
         break;
 
     default:
@@ -536,7 +535,6 @@ static void p2p_fsm_service(lts_socket_t *s)
         }
 
         // 返回retinue信息并修改状态
-        ts->fsm_stat = FSM_P2P_INIT;
         sbuf = ts->conn->conn->sbuf;
         do {
             lts_sjson_t rsp = lts_empty_sjson(pool);
@@ -744,7 +742,6 @@ static void p2p_fsm_service(lts_socket_t *s)
             break;
         }
 
-        ts->fsm_stat = FSM_IDLE;
         free_ts_instance(ts);
 
         make_simple_rsp(E_SUCCESS, "success", s->conn->sbuf, pool);
