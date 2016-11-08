@@ -161,7 +161,7 @@ if __name__ == "__main__":
 
     cli = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        # cli.connect(("192.168.160.4", 4321))
+        # cli.connect(("10.10.10.11", 4321))
         cli.connect(("127.0.0.1", 4321))
     except socket.error as e:
         print e
