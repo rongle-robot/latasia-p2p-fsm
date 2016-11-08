@@ -11,27 +11,29 @@
 
 
 ### 接口列表(`！！！接口参数名称暂用，随时可能修改！！！`)
-* 登录授权（暂用uid或机器人id）
-接口名称: login
-参数: auth
+* 登录授权（暂用uid或机器人id）<br>
+接口名称: login<br>
+参数: auth<br>
 
 * 注销登录
-接口名称: login
-参数: auth
+接口名称: login<br>
+参数: auth<br>
 
 * 消息转发
-接口名称: talkto
-参数1: auth
-参数2: peerauth
-参数3: message
+接口名称: talkto<br>
+参数1: auth<br>
+参数2: peerauth<br>
+参数3: message<br>
 
 * 获取穿透链路信息
-接口名称: getlinkinfo
-参数1: auth
-参数2: peerauth
+接口名称: getlinkinfo<br>
+参数1: auth<br>
+参数2: peerauth<br>
 
 
 ### 接口返回值
-示例：
+示例： <br>
+```
 {"errno": "200", "errmsg": "success"}
 {"errno": "200", "retinue_vice": "192.168.1.2", "errmsg": "success", "retinue_master": "192.168.1.1"}
+```
