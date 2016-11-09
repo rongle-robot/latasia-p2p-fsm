@@ -28,7 +28,7 @@ static void __kmp_next(lts_str_t *str, int *next, ssize_t sz)
     int i = 0;
     int j = 1;
 
-    assert(sz >= str->len);
+    ASSERT(sz >= str->len);
 
     next[i] = -1;
     next[j] = 0;
@@ -71,16 +71,6 @@ char *lts_uint322cstr(uint32_t u32)
     __reverse_region((uint8_t *)rslt, 0, count - 1);
 
     return rslt;
-}
-
-
-void lts_str_lowercase(lts_str_t *s)
-{
-    for (int i = 0; i < s->len; ++i) {
-        if ((s->data[i] >= 'A') && (s->data[i] <= 'Z')) {
-            s->data[i] += 32;
-        }
-    }
 }
 
 

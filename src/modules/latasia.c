@@ -241,8 +241,7 @@ lts_module_t *lts_modules[] = {
     // &lts_app_asyn_backend_module,
     // &lts_app_echo_module,
     // &lts_app_http_core_module,
-    // &lts_app_sjsonb_module,
-    &lts_app_p2p_fsm_module,
+    &lts_app_sjsonb_module,
     NULL,
 };
 lts_module_t *lts_module_event_cur;
@@ -387,6 +386,11 @@ void process_post_list(void)
         if (cs->writable && cs->do_write) {
             (*cs->do_write)(cs);
         }
+
+		// 再处理一次超时事件，有可能业务修改了定时器
+         if (cs->timeoutable && cs->do_timeout) {
+             (void)(*cs->do_timeout)(cs);
+         }
     }
 
     // 清理post链
@@ -673,7 +677,7 @@ int master_main(void)
                 --workers;
             }
             if (-1 == child) {
-                assert(LTS_E_CHILD == errno);
+                ASSERT(LTS_E_CHILD == errno);
                 (void)lts_write_logger(&lts_file_logger, LTS_LOG_INFO,
                                        "%s:master ready to exit\n",
                                        STR_LOCATION);

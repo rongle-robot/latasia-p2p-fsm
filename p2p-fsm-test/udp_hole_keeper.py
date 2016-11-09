@@ -15,8 +15,8 @@ if "__main__" == __name__:
 
     data = {}
     data["auth"] = sys.argv[1]
-    #addr = ("192.168.160.4", 1234)
-    addr = ("127.0.0.1", 1234)
+    addr = ("10.10.10.13", 1234)
+    # addr = ("127.0.0.1", 1234)
     uc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     while (True):
         try:
