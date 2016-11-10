@@ -8,6 +8,7 @@ import socket
 
 
 def pack_sjsonb(cargo):
+    print cargo
     str_cargo = json.dumps(cargo, separators=(",", ":"))
     package = struct.pack(
         "!5I{}s".format(len(str_cargo)), 0xE78f8A9D, 1000, 20, len(str_cargo), 0, str_cargo
@@ -17,6 +18,7 @@ def pack_sjsonb(cargo):
 
 def unpack_sjsonb(package):
     magic_no, _, ent_offset, ent_sz, _ = struct.unpack("!5I", package[0:20])
+    print len(package), ent_offset, ent_sz
     str_cargo = package[ent_offset : ent_offset + ent_sz]
     cargo = json.loads(str_cargo)
     return cargo

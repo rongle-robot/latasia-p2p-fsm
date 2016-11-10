@@ -13,6 +13,9 @@
 #define E_INVALID_ARG       "422"
 #define E_SERVER_FAILED     "500"
 
+#define K_ERRNO             "error_no"
+#define K_ERRMSG            "error_msg"
+
 // 重置定时器
 #define reset_timer(s, v) do {\
     lts_timer_heap_del(&lts_timer_heap, s);\

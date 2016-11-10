@@ -539,8 +539,8 @@ static void p2p_fsm_service(lts_socket_t *s)
         do {
             lts_sjson_t rsp = lts_empty_sjson(pool);
 
-            lts_sjson_add_kv(&rsp, "error_no", E_SUCCESS);
-            lts_sjson_add_kv(&rsp, "error_msg", "success");
+            lts_sjson_add_kv(&rsp, K_ERRNO, E_SUCCESS);
+            lts_sjson_add_kv(&rsp, K_ERRMSG, "success");
             lts_sjson_add_kv(&rsp, "retinue_master",
                              lts_p2p_fsm_conf.retinue_master);
             lts_sjson_add_kv(&rsp, "retinue_vice",
@@ -605,8 +605,8 @@ static void p2p_fsm_service(lts_socket_t *s)
             lts_sjson_t rsp = lts_empty_sjson(pool);
             lts_str_t *str_msg = lts_str_clone(&kv_msg->val, pool);
 
-            lts_sjson_add_kv(&rsp, "error_no", E_SUCCESS);
-            lts_sjson_add_kv(&rsp, "error_msg", "success");
+            lts_sjson_add_kv(&rsp, K_ERRNO, E_SUCCESS);
+            lts_sjson_add_kv(&rsp, K_ERRMSG, "success");
             lts_sjson_add_kv(&rsp, "message", (char const *)str_msg->data);
             (void)lts_proto_sjsonb_encode(&rsp, peer_sb, pool);
             lts_soft_event(peer_ts->conn, 1, 0);
@@ -666,8 +666,8 @@ static void p2p_fsm_service(lts_socket_t *s)
         do {
             lts_sjson_t rsp = lts_empty_sjson(pool);
 
-            lts_sjson_add_kv(&rsp, "error_no", E_SUCCESS);
-            lts_sjson_add_kv(&rsp, "error_msg", "success");
+            lts_sjson_add_kv(&rsp, K_ERRNO, E_SUCCESS);
+            lts_sjson_add_kv(&rsp, K_ERRMSG, "success");
             lts_sjson_add_kv(&rsp, "ip",
                              lts_uint322cstr(ts->udp_hole.ip));
             lts_sjson_add_kv(&rsp, "port",
