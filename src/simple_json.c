@@ -9,18 +9,19 @@
 
 
 // 状态机
-enum {
+enum { // 期待的下一个字符
+    // 注释中^表示起始，$表示结束
     SJSON_EXP_START = 1,
-    SJSON_EXP_K_QUOT_START_OR_END,
-    SJSON_EXP_K_QUOT_START,
-    SJSON_EXP_K_QUOT_END,
-    SJSON_EXP_COLON,
-    SJSON_EXP_V_MAP_OR_QUOT_OR_BRACKET_START,
-    SJSON_EXP_V_QUOT_START,
-    SJSON_EXP_V_QUOT_END,
-    SJSON_EXP_COMMA_OR_BRACKET_END,
-    SJSON_EXP_COMMA_OR_END,
-    SJSON_EXP_END,
+    SJSON_EXP_K_QUOT_START_OR_END, // ^" | $}
+    SJSON_EXP_K_QUOT_START, // ^"
+    SJSON_EXP_K_QUOT_END, // $"
+    SJSON_EXP_COLON, // :
+    SJSON_EXP_V_MAP_OR_QUOT_OR_BRACKET_START, // ^{ | ^" | ^[
+    SJSON_EXP_V_QUOT_END, // $"
+    SJSON_EXP_V_QUOT_START_OR_BRACKET_END, // ^" | $]
+    SJSON_EXP_COMMA_OR_BRACKET_END, // , | $]
+    SJSON_EXP_COMMA_OR_END, // , | $}
+    SJSON_EXP_END, // $}
     SJSON_EXP_NOTHING,
 };
 
@@ -150,10 +151,16 @@ ssize_t lts_sjson_encode_size(lts_sjson_t *sjson)
 
     sz = 2; // {}
     p = rb_first(&sjson->val);
+    if (NULL == p) {
+        return sz;
+    }
+
     while (p) {
         lts_sjson_obj_node_t *node = CONTAINER_OF(
             p, lts_sjson_obj_node_t, tnode
         );
+
+        ++sz; // ,
 
         if (STRING_VALUE == node->node_type) {
             lts_sjson_kv_t *kv = CONTAINER_OF(node, lts_sjson_kv_t, _obj_node);
@@ -171,15 +178,18 @@ ssize_t lts_sjson_encode_size(lts_sjson_t *sjson)
             sz += node->key.len + 2; // ""
             ++sz; // :
             it = list_first(&lv->val);
-            while (it) {
-                lts_sjson_li_node_t *ln = CONTAINER_OF(
-                    it, lts_sjson_li_node_t, node
-                );
+            if (it) {
+                while (it) {
+                    lts_sjson_li_node_t *ln = CONTAINER_OF(
+                        it, lts_sjson_li_node_t, node
+                    );
 
-                sz += ln->val.len + 2; // ""
-                ++sz; // ,
+                    sz += ln->val.len + 2; // ""
+                    ++sz; // ,
 
-                it = list_next(it);
+                    it = list_next(it);
+                }
+                --sz; // 补偿第一次循环多算的逗号
             }
         } else if (OBJ_VALUE == node->node_type) {
             lts_sjson_t *ov = CONTAINER_OF(node, lts_sjson_t, _obj_node);
@@ -190,12 +200,11 @@ ssize_t lts_sjson_encode_size(lts_sjson_t *sjson)
         } else {
             return -1;
         }
-        ++sz; // ,
 
         p = rb_next(p);
     }
 
-    return ++sz; // harmless extra size
+    return --sz; // 补偿第一次循环多算的逗号
 }
 
 
@@ -324,7 +333,7 @@ int lts_sjson_encode(lts_sjson_t *sjson, lts_str_t *output)
     }
 
     // 初始化缓冲区
-    data = (uint8_t *)lts_palloc(pool, data_sz);
+    data = (uint8_t *)lts_palloc(pool, data_sz + 1);
     if (NULL == data) {
         return -1;
     }
@@ -335,7 +344,7 @@ int lts_sjson_encode(lts_sjson_t *sjson, lts_str_t *output)
 
     offset = 0;
     __lts_sjson_encode(sjson, output, &offset);
-    ASSERT(output->len < data_sz);
+    ASSERT(output->len == data_sz);
 
     return 0;
 }
@@ -352,7 +361,7 @@ int lts_sjson_decode(lts_str_t *src, lts_sjson_t *output)
     lts_sjson_kv_t *json_kv = NULL;
     lts_sjson_li_node_t *li_node = NULL;
     lts_sjson_list_t *json_list = NULL;
-    lts_sjson_t *json_obj = NULL;
+    lts_sjson_t *json_obj = NULL; // 当前所在对象
     lts_pool_t *pool = output->pool;
 
     // 过滤不可见字符
@@ -449,7 +458,7 @@ int lts_sjson_decode(lts_str_t *src, lts_sjson_t *output)
                 json_kv->_obj_node.tnode = RB_NODE;
             } else if ('[' == src->data[i]) {
                 in_bracket = TRUE;
-                current_stat = SJSON_EXP_V_QUOT_START; // only
+                current_stat = SJSON_EXP_V_QUOT_START_OR_BRACKET_END; // only
 
                 json_list = (lts_sjson_list_t *)lts_palloc(pool,
                                                            sizeof(*json_list));
@@ -499,27 +508,43 @@ int lts_sjson_decode(lts_str_t *src, lts_sjson_t *output)
             continue;
         }
 
-        case SJSON_EXP_V_QUOT_START:
+        case SJSON_EXP_V_QUOT_START_OR_BRACKET_END:
         {
-            if ('"' != src->data[i]) {
-                errno = LTS_E_INVALID_FORMAT;
-                return -1;
-            }
-
             if (! in_bracket) {
                 abort();
             }
 
-            current_stat = SJSON_EXP_V_QUOT_END;
+            if ('"' == src->data[i]) {
+                current_stat = SJSON_EXP_V_QUOT_END;
 
-            li_node = (lts_sjson_li_node_t *)lts_palloc(pool,
-                                                        sizeof(*li_node));
-            if (NULL == li_node) {
-                errno = LTS_E_NOMEM;
+                li_node = (lts_sjson_li_node_t *)lts_palloc(pool,
+                                                            sizeof(*li_node));
+                if (NULL == li_node) {
+                    errno = LTS_E_NOMEM;
+                    return -1;
+                }
+                li_node->val.data = &src->data[i + 1];
+                li_node->val.len = 0;
+            } else if (']' == src->data[i]) {
+                in_bracket = FALSE;
+                current_stat = SJSON_EXP_COMMA_OR_END;
+
+                if (lstack_is_empty(&obj_stack)) {
+                    json_obj = output;
+                } else {
+                    json_obj = CONTAINER_OF(
+                        lstack_top(&obj_stack), lts_sjson_t, _stk_node
+                    );
+                }
+
+                __lts_sjson_search(&json_obj->val,
+                                  &json_list->_obj_node,
+                                  TRUE);
+                json_list = NULL;
+            } else {
+                errno = LTS_E_INVALID_FORMAT;
                 return -1;
             }
-            li_node->val.data = &src->data[i + 1];
-            li_node->val.len = 0;
 
             continue;
         }
@@ -566,7 +591,7 @@ int lts_sjson_decode(lts_str_t *src, lts_sjson_t *output)
             }
 
             if (',' == src->data[i]) {
-                current_stat = SJSON_EXP_V_QUOT_START; // only
+                current_stat = SJSON_EXP_V_QUOT_START_OR_BRACKET_END; // only
             } else if (']' == src->data[i]) {
                 in_bracket = FALSE;
                 current_stat = SJSON_EXP_COMMA_OR_END; // only

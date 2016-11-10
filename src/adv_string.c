@@ -74,6 +74,18 @@ char *lts_uint322cstr(uint32_t u32)
 }
 
 
+void lts_str_lowercase(lts_str_t *s)
+{
+    for (ssize_t i = 0; i < s->len; ++i) {
+        if ((s->data[i] < 'A') || (s->data[i] > 'Z')) {
+            continue;
+        }
+
+        s->data[i] += 32;
+    }
+}
+
+
 void lts_str_trim(lts_str_t *str)
 {
     // head
