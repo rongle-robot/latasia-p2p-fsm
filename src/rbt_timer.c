@@ -46,6 +46,7 @@ int lts_timer_reset(lts_timer_t *heap,
 void lts_timer_del(lts_timer_t *heap, lts_timer_node_t *node)
 {
     lts_rbmap_del(heap, node->mapnode.key);
+    ASSERT(NULL == lts_rbmap_get(heap, node->mapnode.key));
     return;
 }
 
