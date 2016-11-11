@@ -762,6 +762,7 @@ static void p2p_fsm_service(lts_socket_t *s)
             break;
         }
 
+        lts_rbmap_del(&s_ts_set, ts->map_node.key);
         free_ts_instance(ts);
 
         make_simple_rsp(E_SUCCESS, "success", s->conn->sbuf, pool);
