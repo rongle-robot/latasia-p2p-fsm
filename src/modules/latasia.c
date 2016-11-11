@@ -534,51 +534,57 @@ int event_loop_multi(void)
 }
 
 
-static
-pid_t wait_children(void)
+static int wait_children(void)
 {
-    pid_t child;
+    int nexit; // 退出的子进程数
     int status, slot;
 
-    child = waitpid(-1, &status, WNOHANG);
-    if (child <= 0) {
-        return child;
-    }
-
-    // 有子进程退出
+    nexit = 0;
     for (slot = 0; slot < lts_main_conf.workers; ++slot) {
-        if (child == lts_processes[slot].pid) {
-            lts_processes[slot].pid = -1;
-            if (-1 == close(lts_processes[slot].channel[0])) {
-                (void)lts_write_logger(&lts_file_logger, LTS_LOG_ERROR,
-                                       "%s:close channel failed\n",
-                                       STR_LOCATION);
-            }
-            break;
+        pid_t child;
+
+        child = waitpid(lts_processes[slot].pid, &status, WNOHANG);
+        if (0 == child) {
+            continue;
+        }
+
+        if (-1 == child) {
+            ASSERT(0);
+            continue;
+        }
+
+        // 有子进程退出
+        ++nexit;
+        lts_processes[slot].pid = -1;
+        if (-1 == close(lts_processes[slot].channel[0])) {
+            (void)lts_write_logger(&lts_file_logger, LTS_LOG_ERROR,
+                                   "%s:close channel failed\n",
+                                   STR_LOCATION);
+        }
+
+        if (WIFSIGNALED(status)) {
+            (void)lts_write_logger(
+                &lts_file_logger, LTS_LOG_WARN,
+                "%s:child process %d terminated by %d\n",
+                STR_LOCATION, (long)child, WTERMSIG(status)
+            );
+        }
+
+        if (WIFEXITED(status)) {
+            (void)lts_write_logger(
+                &lts_file_logger, LTS_LOG_INFO,
+                "%s:child process %d exit with code %d\n",
+                STR_LOCATION, (long)child, WEXITSTATUS(status)
+            );
         }
     }
-    if (WIFSIGNALED(status)) {
-        (void)lts_write_logger(
-            &lts_file_logger, LTS_LOG_WARN,
-            "%s:child process %d terminated by %d\n",
-            STR_LOCATION, (long)child, WTERMSIG(status)
-        );
-    }
-    if (WIFEXITED(status)) {
-        (void)lts_write_logger(
-            &lts_file_logger, LTS_LOG_INFO,
-            "%s:child process %d exit with code %d\n",
-            STR_LOCATION, (long)child, WEXITSTATUS(status)
-        );
-    }
 
-    return child;
+    return nexit;
 }
 
 
 int master_main(void)
 {
-    pid_t child;
     int workers, slot;
     sigset_t tmp_mask;
 
@@ -692,14 +698,9 @@ int master_main(void)
 
         if (lts_signals_mask & LTS_MASK_SIGCHLD) {
             // 等待子进程退出
-            while ((child = wait_children()) > 0) {
-                --workers;
-            }
-            if (-1 == child) {
-                ASSERT(LTS_E_CHILD == errno);
-                (void)lts_write_logger(&lts_file_logger, LTS_LOG_INFO,
-                                       "%s:master ready to exit\n",
-                                       STR_LOCATION);
+            workers -= wait_children();
+
+            if (lts_signals_mask & LTS_MASK_SIGEXIT) {
                 break;
             }
         }
