@@ -315,7 +315,9 @@ static void on_channel_udp(lts_socket_t *cs)
 
     ts = find_ts_by_auth(data_ptr->auth);
     if (ts) {
-        ts->udp_hole = data_ptr->peer_addr; // 更新穿透信息
+        // 更新穿透信息
+        ts->udp_hole.ip = data_ptr->peer_addr.ip;
+        ts->udp_hole.port = data_ptr->peer_addr.port;
     } else {
         (void)lts_write_logger(
             &lts_file_logger, LTS_LOG_WARN,

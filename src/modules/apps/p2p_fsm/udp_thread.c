@@ -4,7 +4,9 @@
 #include <sys/socket.h>
 
 #include "simple_json.h"
+#include "logger.h"
 
+#define __THIS_FILE__   "src/modules/apps/p2p_fsm/udp_thread.c"
 #define SOCKADDRLEN     sizeof(struct sockaddr)
 
 
@@ -45,6 +47,11 @@ void *udp_thread(void *arg)
             continue;
         }
 
+        (void)lts_write_logger(
+            &lts_stderr_logger, LTS_LOG_DEBUG,
+            "%s:udp heartbeat: size:%d\n", STR_LOCATION, rcv_sz
+        );
+
         addr_in = (struct sockaddr_in *)cli;
 
         pool = lts_create_pool(4096);
@@ -63,12 +70,22 @@ void *udp_thread(void *arg)
             output = lts_empty_sjson(pool);
             lts_str_init(&str_buf, buf, rcv_sz);
             if (-1 == lts_sjson_decode(&str_buf, &output)) {
+                (void)lts_write_logger(
+                    &lts_stderr_logger, LTS_LOG_DEBUG,
+                    "%s:udp heartbeat: decode sjson failed\n", STR_LOCATION
+                );
+
                 lts_destroy_pool(pool);
                 continue;
             }
 
             objnode = lts_sjson_get_obj_node(&output, &auth_k);
             if (NULL == objnode) {
+                (void)lts_write_logger(
+                    &lts_stderr_logger, LTS_LOG_DEBUG,
+                    "%s:udp heartbeat: sjson no 'auth' field\n", STR_LOCATION
+                );
+
                 lts_destroy_pool(pool);
                 continue;
             }
