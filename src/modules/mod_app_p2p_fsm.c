@@ -230,6 +230,10 @@ static void on_channel_sub(lts_socket_t *cs)
     ts = find_ts_by_auth(data_ptr->auth);
     if (NULL == ts) {
         lts_destroy_pool(data_ptr->pool);
+        (void)lts_write_logger(
+            &lts_file_logger, LTS_LOG_WARN,
+            "%s:invalid session, ignore retinue report\n", STR_LOCATION
+        );
         return;
     }
 
@@ -310,12 +314,14 @@ static void on_channel_udp(lts_socket_t *cs)
     // 毁内存池之后不得再访问data_ptr变量
 
     ts = find_ts_by_auth(data_ptr->auth);
-    if (NULL == ts) {
-        lts_destroy_pool(data_ptr->pool);
-        return;
+    if (ts) {
+        ts->udp_hole = data_ptr->peer_addr; // 更新穿透信息
+    } else {
+        (void)lts_write_logger(
+            &lts_file_logger, LTS_LOG_WARN,
+            "%s:invalid session, ignore udp heartbeat\n", STR_LOCATION
+        );
     }
-
-    ts->udp_hole = data_ptr->peer_addr; // 更新穿透信息
 
     lts_destroy_pool(data_ptr->pool);
 }

@@ -14,9 +14,9 @@ if "__main__" == __name__:
         sys.exit(1)
 
     # master
-    retinue_master = ("10.10.10.11", 4036)
+    retinue_master = ("192.168.160.3", 4036)
     ucm = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    local_addr_master = (("192.168.1.100"), 7778)
+    local_addr_master = (("0.0.0.0"), 7778)
     ucm.bind(local_addr_master)
 
     data = {}
@@ -33,7 +33,7 @@ if "__main__" == __name__:
     ucm.sendto(json.dumps(data), peer_addr)
 
     # vice
-    retinue_vice = ("10.10.10.13", 4036)
+    retinue_vice = ("192.168.160.4", 4036)
     data = {}
     data["type"] = "1"
     data["auth"] = sys.argv[1]
