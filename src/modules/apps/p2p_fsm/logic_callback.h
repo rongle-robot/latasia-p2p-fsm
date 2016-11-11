@@ -16,13 +16,6 @@
 #define K_ERRNO             "error_no"
 #define K_ERRMSG            "error_msg"
 
-// 重置定时器
-#define reset_timer(s, v) do {\
-    lts_timer_heap_del(&lts_timer_heap, s);\
-    (s)->timeout = v;\
-    lts_timer_heap_add(&lts_timer_heap, s);\
-} while (0)
-
 
 extern void make_simple_rsp(char *error_no, char *error_msg,
                             lts_buffer_t *sbuf, lts_pool_t *pool);

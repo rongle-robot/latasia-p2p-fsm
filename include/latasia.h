@@ -92,7 +92,6 @@ struct lts_app_module_itfc_s {
 
 extern void lts_recv(lts_socket_t *cs);
 extern void lts_send(lts_socket_t *cs);
-extern void lts_timeout(lts_socket_t *cs);
 extern void lts_close_conn_orig(int fd, int reset);
 extern void lts_close_conn(lts_socket_t *cs, int reset);
 
@@ -114,7 +113,7 @@ extern lts_module_t lts_app_asyn_backend_module; // 异步后端框架模块
 extern lts_module_t lts_app_echo_module; // echo模块
 extern lts_module_t lts_app_http_core_module; // http core模块
 extern lts_module_t lts_app_sjsonb_module; // sjsonb协议demo模块
-extern lts_module_t lts_app_p2p_fsm_module; // p2p协议控制模块
+extern lts_module_t lts_app_p2p_fsm_module; // p2p-fsm模块
 // }} app模块
 
 extern lts_socket_t *lts_channels[LTS_MAX_PROCESSES];

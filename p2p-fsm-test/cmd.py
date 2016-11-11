@@ -8,7 +8,6 @@ import socket
 
 
 def pack_sjsonb(cargo):
-    print cargo
     str_cargo = json.dumps(cargo, separators=(",", ":"))
     package = struct.pack(
         "!5I{}s".format(len(str_cargo)), 0xE78f8A9D, 1000, 20, len(str_cargo), 0, str_cargo

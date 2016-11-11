@@ -373,11 +373,6 @@ void process_post_list(void)
     dlist_for_each_f_safe(pos, cur_next, &lts_post_list) {
         lts_socket_t *cs = CONTAINER_OF(pos, lts_socket_t, dlnode);
 
-        // 超时事件
-        if (cs->timeoutable && cs->do_timeout) {
-            (void)(*cs->do_timeout)(cs);
-        }
-
         // 读事件
         if (cs->readable && cs->do_read) {
             (*cs->do_read)(cs);
@@ -387,11 +382,6 @@ void process_post_list(void)
         if (cs->writable && cs->do_write) {
             (*cs->do_write)(cs);
         }
-
-		// 再处理一次超时事件，有可能业务修改了定时器
-         if (cs->timeoutable && cs->do_timeout) {
-             (void)(*cs->do_timeout)(cs);
-         }
     }
 
     // 清理post链
@@ -399,7 +389,7 @@ void process_post_list(void)
         lts_socket_t *cs = CONTAINER_OF(pos, lts_socket_t, dlnode);
 
         // 移出post链
-        if ((! cs->readable) && (! cs->writable) && (! cs->timeoutable)) {
+        if ((! cs->readable) && (! cs->writable)) {
             lts_watch_list_add(cs);
         }
     }
@@ -420,6 +410,8 @@ int event_loop_single(void)
     }
 
     while (TRUE) {
+        lts_timer_node_t *min;
+
         // 检查channel信号
         if (LTS_CHANNEL_SIGEXIT == lts_global_sm.channel_signal) {
             (void)lts_write_logger(
@@ -446,6 +438,18 @@ int event_loop_single(void)
         }
 
         process_post_list();
+
+        // 超时事件
+        while ((min = lts_timer_min(&lts_timer_heap))) {
+            if (lts_current_time < min->mapnode.key) {
+                break;
+            }
+
+            lts_timer_del(&lts_timer_heap, min);
+            if (min->on_timeout) {
+                (*min->on_timeout)(min);
+            }
+        }
     }
 
     if (0 != rslt) {
