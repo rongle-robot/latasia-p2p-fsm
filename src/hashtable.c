@@ -34,7 +34,7 @@ uintptr_t time33(void *str, size_t len)
     uintptr_t hash = 0;
 
     for (size_t i = 0; i < len; ++i) {
-        hash = hash *33 + (uintptr_t)((uint8_t *)str)[i];
+        hash = hash * 33 + (uintptr_t)((uint8_t *)str)[i];
     }
 
     return hash;
