@@ -519,7 +519,7 @@ int event_loop_multi(void)
                 break;
             }
 
-            lts_timer_del(&lts_timer_heap, min);
+            ASSERT(lts_timer_del(&lts_timer_heap, min));
             if (min->on_timeout) {
                 (*min->on_timeout)(min);
             }
