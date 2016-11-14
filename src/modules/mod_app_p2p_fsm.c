@@ -539,7 +539,9 @@ static void p2p_fsm_service(lts_socket_t *s)
         ts = find_ts_by_auth(&kv_auth->val);
         if (ts) {
             // 踢掉老连接
-            if (s != ts->conn) {
+            if (NULL == ts->conn) {
+                ts_change_skt(ts, s);
+            } else if (s != ts->conn) {
                 if (ts->conn) {
                     uintptr_t expire_time = 0;
 
@@ -548,6 +550,7 @@ static void p2p_fsm_service(lts_socket_t *s)
                                                 expire_time++));
                 }
                 ts_change_skt(ts, s);
+            } else {
             }
         } else {
             ts = alloc_ts_instance(s, &kv_auth->val);
