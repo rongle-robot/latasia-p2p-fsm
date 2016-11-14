@@ -538,15 +538,15 @@ static void p2p_fsm_service(lts_socket_t *s)
 
         ts = find_ts_by_auth(&kv_auth->val);
         if (ts) {
-            // 踢掉老连接
             if (NULL == ts->conn) {
                 ts_change_skt(ts, s);
             } else if (s != ts->conn) {
+                // 踢掉老连接
                 if (ts->conn) {
                     uintptr_t expire_time = 0;
 
                     while (-1 == lts_timer_reset(&lts_timer_heap,
-                                                 &s->timer_node,
+                                                 &ts->conn->timer_node,
                                                  expire_time++));
                 }
                 ts_change_skt(ts, s);
