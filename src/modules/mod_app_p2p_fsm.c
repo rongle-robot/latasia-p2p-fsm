@@ -171,8 +171,7 @@ redisContext *redisGetConnection(void)
         // log
         (void)lts_write_logger(
             &lts_stderr_logger, LTS_LOG_ERROR,
-            "%s:connect to redis failed, %s\n",
-            STR_LOCATION, rds->errstr
+            "%s:connect to redis failed, %s\n", STR_LOCATION, rds->errstr
         );
 
         if (rds) {
@@ -487,10 +486,9 @@ static void p2p_fsm_service(lts_socket_t *s)
         // 非法请求
         uintptr_t expire_time = 0;
 
-        while (-1 == lts_timer_reset(&lts_timer_heap,
-                                     &s->timer_node,
-                                     expire_time++)) {
-        }
+        ASSERT(0 == lts_timer_reset(&lts_timer_heap,
+                                    &s->timer_node,
+                                    expire_time++));
         lts_destroy_pool(pool);
         return;
     }
@@ -505,10 +503,9 @@ static void p2p_fsm_service(lts_socket_t *s)
         // 非法请求
         uintptr_t expire_time = 0;
 
-        while (-1 == lts_timer_reset(&lts_timer_heap,
-                                     &s->timer_node,
-                                     expire_time++)) {
-        }
+        ASSERT(0 == lts_timer_reset(&lts_timer_heap,
+                                    &s->timer_node,
+                                    expire_time++));
         lts_destroy_pool(pool);
         break;
     }
@@ -522,10 +519,9 @@ static void p2p_fsm_service(lts_socket_t *s)
         uintptr_t expire_time = s->timer_node.mapnode.key + 600;
 
         // 保持连接
-        while (-1 == lts_timer_reset(&lts_timer_heap,
-                                     &s->timer_node,
-                                     expire_time++)) {
-        }
+        ASSERT(0 == lts_timer_reset(&lts_timer_heap,
+                                    &s->timer_node,
+                                    expire_time++));
         make_simple_rsp(E_SUCCESS, "success", s->conn->sbuf, pool);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_login_v)) {
         // 登录
@@ -547,10 +543,9 @@ static void p2p_fsm_service(lts_socket_t *s)
                 if (ts->conn) {
                     uintptr_t expire_time = 0;
 
-                    while (-1 == lts_timer_reset(&lts_timer_heap,
-                                                 &s->timer_node,
-                                                 expire_time++)) {
-                    }
+                    ASSERT(0 == lts_timer_reset(&lts_timer_heap,
+                                                &s->timer_node,
+                                                expire_time++));
                 }
                 ts_change_skt(ts, s);
             }
@@ -758,7 +753,7 @@ static void p2p_fsm_service(lts_socket_t *s)
         }
         kv_auth = CONTAINER_OF(objnode, lts_sjson_kv_t, _obj_node);
 
-        ts_node = lts_rbmap_del(&s_ts_set,
+        ts_node = lts_rbmap_get(&s_ts_set,
                                 time33(kv_auth->val.data, kv_auth->val.len));
         if (NULL == ts_node) {
             make_simple_rsp(E_NOT_EXIST, "not found",
@@ -773,8 +768,13 @@ static void p2p_fsm_service(lts_socket_t *s)
             break;
         }
 
-        lts_rbmap_del(&s_ts_set, ts->map_node.key);
+        lts_rbmap_safe_del(&s_ts_set, &ts->map_node);
         free_ts_instance(ts);
+
+        (void)lts_write_logger(
+            &lts_stderr_logger, LTS_LOG_INFO,
+            "session '%s' logout\n", lts_str_clone(&kv_auth->val, pool)->data
+        );
 
         make_simple_rsp(E_SUCCESS, "success", s->conn->sbuf, pool);
     } else {
