@@ -516,12 +516,6 @@ static void p2p_fsm_service(lts_socket_t *s)
     // 暂用if-else分发，将来使用hash或map
     if (0 == lts_str_compare(&kv_interface->val, &itfc_heartbeat_v)) {
         // 心跳
-        uintptr_t expire_time = s->timer_node.mapnode.key + 600;
-
-        // 保持连接
-        while (-1 == lts_timer_reset(&lts_timer_heap,
-                                     &s->timer_node,
-                                     expire_time++));
         make_simple_rsp(E_SUCCESS, "success", s->conn->sbuf, pool);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_login_v)) {
         // 登录
