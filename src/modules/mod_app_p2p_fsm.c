@@ -229,11 +229,13 @@ static void on_channel_sub(lts_socket_t *cs)
 
     ts = find_ts_by_auth(data_ptr->auth);
     if (NULL == ts) {
-        lts_destroy_pool(data_ptr->pool);
         (void)lts_write_logger(
             &lts_file_logger, LTS_LOG_WARN,
-            "%s:invalid session, ignore retinue report\n", STR_LOCATION
+            "%s:invalid session '%s', ignore retinue report\n",
+            STR_LOCATION, data_ptr->auth->data
         );
+
+        lts_destroy_pool(data_ptr->pool);
         return;
     }
 
@@ -321,7 +323,8 @@ static void on_channel_udp(lts_socket_t *cs)
     } else {
         (void)lts_write_logger(
             &lts_file_logger, LTS_LOG_WARN,
-            "%s:invalid session, ignore udp heartbeat\n", STR_LOCATION
+            "%s:invalid session '%s', ignore udp heartbeat\n",
+            STR_LOCATION, data_ptr->auth->data
         );
     }
 
