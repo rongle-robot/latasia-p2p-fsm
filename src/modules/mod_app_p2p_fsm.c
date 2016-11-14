@@ -451,7 +451,7 @@ static void p2p_fsm_on_closing(lts_socket_t *s)
     tcp_session_t *ts;
 
     ts = (tcp_session_t *)s->app_ctx;
-    if (ts) {
+    if (ts && (ts->conn == s)) {
         ts->conn = NULL;
         s->app_ctx = NULL;
     }
