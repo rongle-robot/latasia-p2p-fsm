@@ -486,9 +486,9 @@ static void p2p_fsm_service(lts_socket_t *s)
         // 非法请求
         uintptr_t expire_time = 0;
 
-        ASSERT(0 == lts_timer_reset(&lts_timer_heap,
-                                    &s->timer_node,
-                                    expire_time++));
+        while (-1 == lts_timer_reset(&lts_timer_heap,
+                                     &s->timer_node,
+                                     expire_time++));
         lts_destroy_pool(pool);
         return;
     }
@@ -503,9 +503,9 @@ static void p2p_fsm_service(lts_socket_t *s)
         // 非法请求
         uintptr_t expire_time = 0;
 
-        ASSERT(0 == lts_timer_reset(&lts_timer_heap,
-                                    &s->timer_node,
-                                    expire_time++));
+        while (-1 == lts_timer_reset(&lts_timer_heap,
+                                     &s->timer_node,
+                                     expire_time++));
         lts_destroy_pool(pool);
         break;
     }
@@ -519,9 +519,9 @@ static void p2p_fsm_service(lts_socket_t *s)
         uintptr_t expire_time = s->timer_node.mapnode.key + 600;
 
         // 保持连接
-        ASSERT(0 == lts_timer_reset(&lts_timer_heap,
-                                    &s->timer_node,
-                                    expire_time++));
+        while (-1 == lts_timer_reset(&lts_timer_heap,
+                                     &s->timer_node,
+                                     expire_time++));
         make_simple_rsp(E_SUCCESS, "success", s->conn->sbuf, pool);
     } else if (0 == lts_str_compare(&kv_interface->val, &itfc_login_v)) {
         // 登录
@@ -545,9 +545,9 @@ static void p2p_fsm_service(lts_socket_t *s)
                 if (ts->conn) {
                     uintptr_t expire_time = 0;
 
-                    ASSERT(0 == lts_timer_reset(&lts_timer_heap,
-                                                &s->timer_node,
-                                                expire_time++));
+                    while (-1 == lts_timer_reset(&lts_timer_heap,
+                                                 &s->timer_node,
+                                                 expire_time++));
                 }
                 ts_change_skt(ts, s);
             } else {
