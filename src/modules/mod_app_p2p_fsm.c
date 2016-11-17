@@ -257,6 +257,7 @@ static void on_channel_sub(lts_socket_t *cs)
             break;
         }
 
+        ASSERT(0 != ts->pre_udp_port);
         if (ts->pre_udp_port != data_ptr->udp_port) {
             ts->nat_type = NAT_SYMMETIC;
         } else if (ts->port_restricted) {
@@ -275,6 +276,7 @@ static void on_channel_sub(lts_socket_t *cs)
             break;
         }
 
+        ASSERT(0 != ts->pre_udp_port);
         if (ts->pre_udp_port != data_ptr->udp_port) {
             ts->nat_type = NAT_SYMMETIC;
         } else if (ts->port_restricted) {
