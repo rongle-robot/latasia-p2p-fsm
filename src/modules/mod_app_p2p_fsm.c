@@ -254,6 +254,8 @@ static void on_channel_sub(lts_socket_t *cs)
 
     case FSM_WAIT_RETINUE_MASTER:
         if (! data_ptr->retinue_master) {
+            // vice重复消息，更新端口
+            ts->pre_udp_port = data_ptr->udp_port;
             break;
         }
 
@@ -273,6 +275,8 @@ static void on_channel_sub(lts_socket_t *cs)
 
     case FSM_WAIT_RETINUE_VICE:
         if (data_ptr->retinue_master) {
+            // master重复消息，更新端口
+            ts->pre_udp_port = data_ptr->udp_port;
             break;
         }
 
